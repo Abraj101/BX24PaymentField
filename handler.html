@@ -163,6 +163,34 @@
         </div>
     </div>
 
+    <!-- ── Schedule Dates Block (60/40, 3yr, 5yr) ── -->
+    <div class="custom-fields-block" id="installmentBlock">
+        <div class="divider"></div>
+        <div class="sub-header">Schedule Dates</div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">Downpayment Start Date</span>
+                <input type="date" class="bx-input" id="downpaymentStartDate">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Installment Start Date</span>
+                <input type="date" class="bx-input" id="installmentStartDate">
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Full Payment Block ── -->
+    <div class="custom-fields-block" id="fullPaymentBlock">
+        <div class="divider"></div>
+        <div class="sub-header">Payment Date</div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">Payment Date</span>
+                <input type="date" class="bx-input" id="paymentDate">
+            </div>
+        </div>
+    </div>
+
     <!-- ── Custom Plan Block ── -->
     <div class="custom-fields-block" id="customBlock">
         <div class="divider"></div>
@@ -493,24 +521,40 @@ function removeBalloonRow(idx) {
 
 // ── Plan Toggle ───────────────────────────────────────────────────────────────
 
+// ── Plan field groups ─────────────────────────────────────────────────────────
+const INSTALLMENT_PLANS  = ['60_40', '3_years', '5_years'];
+const CUSTOM_FIELDS      = ['totalAmount', 'downpaymentPct', 'downpaymentDate',
+                            'possessionPct', 'possessionDate', 'paymentPlanUnits',
+                            'innerPaymentPlan'];
+const INSTALLMENT_FIELDS = ['downpaymentStartDate', 'installmentStartDate'];
+const FULLPAYMENT_FIELDS = ['paymentDate'];
+
+function clearFields(ids) {
+    ids.forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+}
+
 function onPlanChange() {
     const plan = document.getElementById('paymentPlan').value;
-    const isCustom = plan === 'custom';
+    const isCustom      = plan === 'custom';
+    const isInstallment = INSTALLMENT_PLANS.indexOf(plan) !== -1;
+    const isFull        = plan === 'full_payment';
+
     document.getElementById('customBlock').classList.toggle('visible', isCustom);
-    if (!isCustom) clearCustomFields();   // reset custom inputs when leaving Custom
+    document.getElementById('installmentBlock').classList.toggle('visible', isInstallment);
+    document.getElementById('fullPaymentBlock').classList.toggle('visible', isFull);
+
+    // Reset the inputs of any block that is now hidden, so storage stays clean
+    if (!isCustom)      clearFields(CUSTOM_FIELDS);
+    if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
+    if (!isFull)        clearFields(FULLPAYMENT_FIELDS);
+
     enforceDiscountCap();
     notifyResize();
     handleDataChange();
     scheduleRecalc();                     // recalc handles both custom & catalog plans
-}
-
-// Empties every Custom-plan input (called when the plan is no longer Custom)
-function clearCustomFields() {
-    ['totalAmount', 'downpaymentPct', 'downpaymentDate',
-     'possessionPct', 'possessionDate', 'paymentPlanUnits',
-     'innerPaymentPlan'].forEach(function(id) {
-        document.getElementById(id).value = '';
-    });
 }
 
 // ── Collect Data ──────────────────────────────────────────────────────────────
@@ -540,6 +584,17 @@ function collectData() {
         data.possessionDate   = document.getElementById('possessionDate').value   || '';
         data.innerPaymentPlan = document.getElementById('innerPaymentPlan').value || '';
         data.paymentPlanUnits = document.getElementById('paymentPlanUnits').value || '';
+    }
+
+    // Schedule dates stored only for 60/40, 3yr, 5yr
+    if (INSTALLMENT_PLANS.indexOf(plan) !== -1) {
+        data.downpaymentStartDate = document.getElementById('downpaymentStartDate').value || '';
+        data.installmentStartDate = document.getElementById('installmentStartDate').value || '';
+    }
+
+    // Payment date stored only for Full Payment
+    if (plan === 'full_payment') {
+        data.paymentDate = document.getElementById('paymentDate').value || '';
     }
 
     return data;
@@ -583,10 +638,13 @@ function populateFields(rawValue) {
         const data = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
 
         if (data.paymentPlan) {
-            document.getElementById('paymentPlan').value = data.paymentPlan;
-            document.getElementById('customBlock').classList.toggle(
-                'visible', data.paymentPlan === 'custom'
+            const p = data.paymentPlan;
+            document.getElementById('paymentPlan').value = p;
+            document.getElementById('customBlock').classList.toggle('visible', p === 'custom');
+            document.getElementById('installmentBlock').classList.toggle(
+                'visible', INSTALLMENT_PLANS.indexOf(p) !== -1
             );
+            document.getElementById('fullPaymentBlock').classList.toggle('visible', p === 'full_payment');
         }
 
         if (data.discountPct) document.getElementById('discountPct').value = data.discountPct;
@@ -611,6 +669,21 @@ function populateFields(rawValue) {
             if (data.innerPaymentPlan) {
                 document.getElementById('innerPaymentPlan').value = data.innerPaymentPlan;
             }
+        }
+
+        // Restore Schedule Dates (60/40, 3yr, 5yr)
+        if (INSTALLMENT_PLANS.indexOf(data.paymentPlan) !== -1) {
+            if (data.downpaymentStartDate) {
+                document.getElementById('downpaymentStartDate').value = data.downpaymentStartDate;
+            }
+            if (data.installmentStartDate) {
+                document.getElementById('installmentStartDate').value = data.installmentStartDate;
+            }
+        }
+
+        // Restore Payment Date (Full Payment)
+        if (data.paymentPlan === 'full_payment' && data.paymentDate) {
+            document.getElementById('paymentDate').value = data.paymentDate;
         }
     } catch(e) {
         console.error("populateFields parse error:", e);
