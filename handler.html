@@ -362,9 +362,37 @@ async function getProductPlanPrice(productId, plan) {
 // Read deal products, sum plan prices, apply capped discount, write the amount
 async function recalcDealAmount() {
     const plan = document.getElementById('paymentPlan').value;
-    if (!currentDealId) return;
-    if (!plan || plan === 'custom') return;   // custom plan is fully manual
+    if (!currentDealId || !plan) return;
 
+    let disc = parseFloat(document.getElementById('discountPct').value) || 0;
+    if (disc < 0) disc = 0;
+
+    // ── Custom plan: price from the manually entered Total Amount ──
+    if (plan === 'custom') {
+        const raw   = document.getElementById('totalAmount').value;
+        const total = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+        if (isNaN(total) || total <= 0) {
+            setAmountStatus('Enter a Total Amount to set the deal amount.');
+            return;
+        }
+        if (disc > 100) disc = 100;   // no 15% cap on Custom — only sane bounds
+        const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
+        try {
+            await callBX('crm.deal.update', {
+                id: currentDealId,
+                fields: { OPPORTUNITY: finalAmount, IS_MANUAL_OPPORTUNITY: 'Y' }
+            });
+            setAmountStatus('Amount set: ' + finalAmount.toLocaleString() +
+                (disc ? ('  (−' + disc + '%)') : ''));
+        } catch (e) {
+            console.error('[PaymentWidget] custom recalc error:', e);
+            setAmountStatus('Could not set amount (see console).', true);
+        }
+        return;
+    }
+
+    // ── Catalog-priced plans (60/40, 3yr, 5yr, full payment) ──
+    if (disc > MAX_DISCOUNT) disc = MAX_DISCOUNT;
     setAmountStatus('Calculating amount…');
     try {
         const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
@@ -393,10 +421,6 @@ async function recalcDealAmount() {
                 '" price found for: ' + missing.join(', '), true);
             return;
         }
-
-        let disc = parseFloat(document.getElementById('discountPct').value) || 0;
-        if (disc < 0) disc = 0;
-        if (disc > MAX_DISCOUNT) disc = MAX_DISCOUNT;
 
         const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
 
@@ -471,17 +495,29 @@ function removeBalloonRow(idx) {
 
 function onPlanChange() {
     const plan = document.getElementById('paymentPlan').value;
-    document.getElementById('customBlock').classList.toggle('visible', plan === 'custom');
-    if (plan === 'custom') setAmountStatus('');   // manual mode — hide auto-calc note
+    const isCustom = plan === 'custom';
+    document.getElementById('customBlock').classList.toggle('visible', isCustom);
+    if (!isCustom) clearCustomFields();   // reset custom inputs when leaving Custom
     enforceDiscountCap();
     notifyResize();
     handleDataChange();
-    scheduleRecalc();
+    scheduleRecalc();                     // recalc handles both custom & catalog plans
+}
+
+// Empties every Custom-plan input (called when the plan is no longer Custom)
+function clearCustomFields() {
+    ['totalAmount', 'downpaymentPct', 'downpaymentDate',
+     'possessionPct', 'possessionDate', 'paymentPlanUnits',
+     'innerPaymentPlan'].forEach(function(id) {
+        document.getElementById(id).value = '';
+    });
 }
 
 // ── Collect Data ──────────────────────────────────────────────────────────────
 
 function collectData() {
+    const plan = document.getElementById('paymentPlan').value;
+
     const balloons = [];
     document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
         const pos = row.querySelector('[data-balloon="position"]').value.trim();
@@ -489,18 +525,24 @@ function collectData() {
         if (pos || amt) balloons.push({ position: pos, amount: amt });
     });
 
-    return {
-        paymentPlan:      document.getElementById('paymentPlan').value,
-        discountPct:      document.getElementById('discountPct').value      || '0',
-        balloonPayments:  balloons,
-        totalAmount:      document.getElementById('totalAmount').value      || '',
-        downpaymentPct:   document.getElementById('downpaymentPct').value   || '',
-        downpaymentDate:  document.getElementById('downpaymentDate').value  || '',
-        possessionPct:    document.getElementById('possessionPct').value    || '',
-        possessionDate:   document.getElementById('possessionDate').value   || '',
-        innerPaymentPlan: document.getElementById('innerPaymentPlan').value || '',
-        paymentPlanUnits: document.getElementById('paymentPlanUnits').value || ''
+    const data = {
+        paymentPlan:     plan,
+        discountPct:     document.getElementById('discountPct').value || '0',
+        balloonPayments: balloons
     };
+
+    // Custom plan details are stored ONLY while Custom is the selected plan
+    if (plan === 'custom') {
+        data.totalAmount      = document.getElementById('totalAmount').value      || '';
+        data.downpaymentPct   = document.getElementById('downpaymentPct').value   || '';
+        data.downpaymentDate  = document.getElementById('downpaymentDate').value  || '';
+        data.possessionPct    = document.getElementById('possessionPct').value    || '';
+        data.possessionDate   = document.getElementById('possessionDate').value   || '';
+        data.innerPaymentPlan = document.getElementById('innerPaymentPlan').value || '';
+        data.paymentPlanUnits = document.getElementById('paymentPlanUnits').value || '';
+    }
+
+    return data;
 }
 
 // ── Autosave ──────────────────────────────────────────────────────────────────
@@ -557,15 +599,18 @@ function populateFields(rawValue) {
             });
         }
 
-        ['totalAmount','downpaymentPct','downpaymentDate',
-         'possessionPct','possessionDate','paymentPlanUnits'].forEach(function(id) {
-            if (data[id] !== undefined && data[id] !== '') {
-                document.getElementById(id).value = data[id];
-            }
-        });
+        // Restore Custom-plan inputs only when the saved plan is Custom
+        if (data.paymentPlan === 'custom') {
+            ['totalAmount','downpaymentPct','downpaymentDate',
+             'possessionPct','possessionDate','paymentPlanUnits'].forEach(function(id) {
+                if (data[id] !== undefined && data[id] !== '') {
+                    document.getElementById(id).value = data[id];
+                }
+            });
 
-        if (data.innerPaymentPlan) {
-            document.getElementById('innerPaymentPlan').value = data.innerPaymentPlan;
+            if (data.innerPaymentPlan) {
+                document.getElementById('innerPaymentPlan').value = data.innerPaymentPlan;
+            }
         }
     } catch(e) {
         console.error("populateFields parse error:", e);
@@ -622,6 +667,9 @@ document.getElementById('discountPct').addEventListener('input', function() {
     enforceDiscountCap();
     scheduleRecalc();
 });
+
+// Custom Total Amount: re-calculate the deal amount as it's typed
+document.getElementById('totalAmount').addEventListener('input', scheduleRecalc);
 </script>
 </body>
 </html>
