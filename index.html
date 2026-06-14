@@ -23,23 +23,37 @@
             background: #2fc6f6; color: #fff; padding: 12px 24px;
             border: none; border-radius: 4px; font-weight: 700;
             cursor: pointer; font-size: 14px; width: 100%;
-            transition: background 0.15s;
+            transition: background 0.15s; margin-bottom: 10px;
         }
         .btn:hover { background: #1cb5e3; }
         .btn:disabled { background: #a0d8ef; cursor: not-allowed; }
+        .btn-danger {
+            background: #fff; color: #e53935; border: 1.5px solid #e53935;
+            padding: 10px 24px; border-radius: 4px; font-weight: 700;
+            cursor: pointer; font-size: 13px; width: 100%;
+            transition: background 0.15s;
+        }
+        .btn-danger:hover { background: #fdecea; }
         .status-log {
             margin-top: 15px; font-size: 12px; color: #7f8c8d;
             text-align: left; background: #f8fafc; padding: 10px;
             border-radius: 4px; border: 1px solid #e2e8f0; display: none;
             line-height: 1.8;
         }
+        .divider { border: none; border-top: 1px solid #eef0f3; margin: 16px 0; }
     </style>
 </head>
 <body>
 <div class="setup-card">
     <h2>Southlofts Payment Engine Setup</h2>
-    <p>Click below to automatically register the Payment Details widget inside your CRM Deal views.</p>
-    <button class="btn" id="activateBtn" onclick="activate()">Activate Sidebar Placement</button>
+    <p>Registers the <strong>Payment Details</strong> tab inside your CRM Deal left column. Also unbinds the old sidebar placement if present.</p>
+
+    <button class="btn" id="activateBtn" onclick="activate()">Activate Deal Tab Placement</button>
+
+    <hr class="divider">
+
+    <button class="btn-danger" id="unbindBtn" onclick="unbindOld()">Remove Old Sidebar Placement</button>
+
     <div class="status-log" id="statusLog"></div>
 </div>
 
@@ -59,31 +73,61 @@ function activate() {
     log("Initialising BX24 context...");
 
     BX24.init(function() {
-        log("BX24 ready. Binding placement...");
+        log("BX24 ready. Binding tab placement...");
 
         const handlerUrl = window.location.origin + '/handler.html';
 
         BX24.callMethod('placement.bind', {
-            PLACEMENT: 'CRM_DEAL_DETAIL_ACTIVITY',
+            PLACEMENT: 'CRM_DEAL_DETAIL_TAB',
             HANDLER:   handlerUrl,
-            TITLE:     'Payment Details'
+            TITLE:     'Payment Details',
+            DESCRIPTION: 'Payment plan, discounts and balloon payments'
         }, function(result) {
             if (result.error()) {
                 const err = result.error().toString();
                 if (err.indexOf('already exists') !== -1) {
-                    log("<span style='color:#2e7d32;font-weight:bold'>✓ Already registered — placement is active.</span>");
+                    log("<span style='color:#2e7d32;font-weight:bold'>✓ Tab placement already registered and active.</span>");
                     BX24.installFinish();
                 } else {
                     log("<span style='color:#c62828;font-weight:bold'>✗ Error: " + err + "</span>");
-                    log("Check that the <b>placement</b> scope is added to your Local App permissions.");
+                    log("Ensure <b>placement</b> scope is added to your Local App permissions.");
                     btn.disabled = false;
                     btn.textContent = 'Retry';
                 }
             } else {
-                log("<span style='color:#2e7d32;font-weight:bold'>✓ Payment Details widget registered successfully!</span>");
-                log("Open any Deal in your CRM — the widget will appear in the activity area.");
+                log("<span style='color:#2e7d32;font-weight:bold'>✓ Payment Details tab registered successfully!</span>");
+                log("Open any Deal — click the <b>Payment Details</b> tab in the left column.");
                 BX24.installFinish();
             }
+        });
+    });
+}
+
+function unbindOld() {
+    const btn = document.getElementById('unbindBtn');
+    btn.disabled = true;
+    btn.textContent = 'Removing...';
+
+    BX24.init(function() {
+        const handlerUrl = window.location.origin + '/handler.html';
+
+        BX24.callMethod('placement.unbind', {
+            PLACEMENT: 'CRM_DEAL_DETAIL_ACTIVITY',
+            HANDLER:   handlerUrl
+        }, function(result) {
+            if (result.error()) {
+                const err = result.error().toString();
+                // Not found = already removed, treat as success
+                if (err.indexOf('not found') !== -1 || err.indexOf('NOT_FOUND') !== -1) {
+                    log("<span style='color:#2e7d32'>✓ Sidebar placement was already removed.</span>");
+                } else {
+                    log("<span style='color:#c62828'>✗ Unbind error: " + err + "</span>");
+                }
+            } else {
+                log("<span style='color:#2e7d32;font-weight:bold'>✓ Old sidebar placement removed.</span>");
+            }
+            btn.disabled = false;
+            btn.textContent = 'Remove Old Sidebar Placement';
         });
     });
 }

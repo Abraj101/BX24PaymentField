@@ -3,44 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Section</title>
+    <title>Payment Details</title>
     <script src="https://api.bitrix24.com/api/v1/"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: sans-serif; font-size: 13px; color: #333; background: transparent; overflow-x: hidden; }
-        .bx-section { background: #fff; border-radius: 8px; padding-bottom: 12px; }
-        .section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 8px; border-bottom: 1px solid #f2f4f7; margin-bottom: 4px; }
-        .section-title { font-size: 13px; font-weight: 700; color: #2fc6f6; text-transform: uppercase; letter-spacing: 0.02em; }
-        .field-row { display: flex; gap: 12px; padding: 8px 16px; align-items: flex-end; }
-        .field-group { display: flex; flex-direction: column; flex: 1; gap: 6px; }
-        .field-group.half { flex: 0 0 calc(50% - 6px); }
-        .field-label { font-size: 11px; font-weight: 700; color: #a1a6b1; text-transform: uppercase; }
-        .bx-input, .bx-select { width: 100%; height: 38px; padding: 0 12px; border: 1px solid #cbd0da; border-radius: 4px; color: #424956; background: #fff; outline: none; transition: border-color 0.15s; appearance: none; -webkit-appearance: none; }
-        .bx-input:focus, .bx-select:focus { border-color: #2fc6f6; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-size: 13px; color: #333; background: #fff;
+            overflow-x: hidden;
+        }
+
+        /* ── Layout ── */
+        .bx-section { background: #fff; padding-bottom: 20px; }
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px 12px; border-bottom: 2px solid #f0f3f7;
+            margin-bottom: 8px;
+        }
+        .section-title {
+            font-size: 14px; font-weight: 700; color: #2fc6f6;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .save-indicator {
+            font-size: 11px; color: #2fc6f6; font-weight: 600;
+            padding: 0; min-height: 16px;
+        }
+
+        /* ── Field rows ── */
+        .field-row {
+            display: flex; gap: 16px; padding: 10px 20px; align-items: flex-end;
+        }
+        .field-group { display: flex; flex-direction: column; flex: 1; gap: 5px; }
+        .field-group.half { flex: 0 0 calc(50% - 8px); }
+        .field-group.third { flex: 0 0 calc(33.33% - 11px); }
+        .field-label {
+            font-size: 11px; font-weight: 700; color: #8e99a4;
+            text-transform: uppercase; letter-spacing: 0.03em;
+        }
+
+        /* ── Inputs ── */
+        .bx-input, .bx-select {
+            width: 100%; height: 36px; padding: 0 12px;
+            border: 1px solid #d4dae3; border-radius: 6px;
+            color: #333; background: #fff; outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            appearance: none; -webkit-appearance: none;
+            font-size: 13px;
+        }
+        .bx-input:focus, .bx-select:focus {
+            border-color: #2fc6f6;
+            box-shadow: 0 0 0 3px rgba(47,198,246,0.12);
+        }
         .select-wrapper { position: relative; }
-        .select-wrapper::after { content: ""; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #a1a6b1; pointer-events: none; }
-        .balloon-section { padding: 12px 16px 4px; }
-        .balloon-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .select-wrapper::after {
+            content: ""; position: absolute; right: 12px; top: 50%;
+            transform: translateY(-50%); width: 0; height: 0;
+            border-left: 4px solid transparent; border-right: 4px solid transparent;
+            border-top: 5px solid #8e99a4; pointer-events: none;
+        }
+
+        /* ── Section divider ── */
+        .divider { height: 1px; background: #f0f3f7; margin: 8px 0; }
+        .sub-header {
+            font-size: 11px; font-weight: 700; color: #2fc6f6;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 12px 20px 4px;
+        }
+
+        /* ── Balloon payments ── */
+        .balloon-section { padding: 12px 20px 4px; }
+        .balloon-header {
+            display: flex; align-items: center;
+            justify-content: space-between; margin-bottom: 10px;
+        }
         .balloon-title { font-size: 12px; font-weight: 700; color: #535c69; }
-        .btn-add-balloon { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #2fc6f6; background: transparent; color: #2fc6f6; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; outline: none; }
-        .btn-add-balloon:hover { background-color: #2fc6f6; color: #fff; }
-        .balloon-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
-        .balloon-row .bx-input { flex: 1; height: 38px; background: #f8fafc; border: 1px solid #ddecfa; }
-        .btn-remove-balloon { background: transparent; border: none; color: #ff5c5c; font-size: 22px; cursor: pointer; padding: 0 4px; line-height: 1; }
-        .custom-fields-block { border-top: 1px solid #f2f4f7; margin-top: 8px; padding-top: 4px; display: none; }
+        .btn-add-balloon {
+            width: 28px; height: 28px; border-radius: 50%;
+            border: 1.5px solid #2fc6f6; background: transparent;
+            color: #2fc6f6; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; outline: none; transition: all 0.15s;
+        }
+        .btn-add-balloon:hover { background: #2fc6f6; color: #fff; }
+        .balloon-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 32px;
+            gap: 10px; align-items: center; margin-bottom: 8px;
+        }
+        .balloon-row .bx-input {
+            background: #f8fafc; border-color: #d4dae3;
+        }
+        .btn-remove-balloon {
+            background: transparent; border: none;
+            color: #d0d4db; font-size: 20px;
+            cursor: pointer; padding: 0; line-height: 1;
+            transition: color 0.15s;
+        }
+        .btn-remove-balloon:hover { color: #ff5c5c; }
+
+        /* ── Custom plan block ── */
+        .custom-fields-block { display: none; }
         .custom-fields-block.visible { display: block; }
-        .custom-block-label { font-size: 11px; font-weight: 700; color: #2fc6f6; text-transform: uppercase; padding: 10px 16px 2px; }
-        .divider { height: 1px; background: #f2f4f7; margin: 8px 0; }
-        .save-indicator { font-size: 11px; color: #2fc6f6; font-weight: 600; padding: 2px 16px; text-align: right; min-height: 16px; }
+
+        /* ── Empty balloon state ── */
+        .balloon-empty {
+            font-size: 12px; color: #b0b8c4;
+            text-align: center; padding: 8px 0 4px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
 <div class="bx-section" id="mainContainer">
+
     <div class="section-header">
         <span class="section-title">Payment Details</span>
+        <span class="save-indicator" id="saveIndicator">Connecting...</span>
     </div>
-    <div class="save-indicator" id="saveIndicator">Connecting...</div>
 
+    <!-- ── Row 1: Plan + Discount ── -->
     <div class="field-row">
         <div class="field-group">
             <span class="field-label">Payment Plan</span>
@@ -57,27 +138,34 @@
         </div>
         <div class="field-group half">
             <span class="field-label">Discount %</span>
-            <input type="number" class="bx-input" id="discountPct" placeholder="0" min="0" max="100" step="0.01">
+            <input type="number" class="bx-input" id="discountPct"
+                   placeholder="0" min="0" max="100" step="0.01">
         </div>
     </div>
 
+    <!-- ── Balloon Payments ── -->
     <div class="balloon-section">
         <div class="balloon-header">
             <span class="balloon-title">Balloon Payments</span>
             <button class="btn-add-balloon" onclick="addBalloonRow()" type="button">+</button>
         </div>
-        <div id="balloonRows"></div>
+        <div id="balloonRows">
+            <div class="balloon-empty" id="balloonEmpty">No balloon payments added</div>
+        </div>
     </div>
 
+    <!-- ── Custom Plan Block ── -->
     <div class="custom-fields-block" id="customBlock">
         <div class="divider"></div>
-        <div class="custom-block-label">Custom Plan Details</div>
+        <div class="sub-header">Custom Plan Details</div>
+
         <div class="field-row">
             <div class="field-group">
-                <span class="field-label">Total Amount</span>
+                <span class="field-label">Total Amount (PKR)</span>
                 <input type="number" class="bx-input" id="totalAmount" placeholder="0">
             </div>
         </div>
+
         <div class="field-row">
             <div class="field-group half">
                 <span class="field-label">Downpayment %</span>
@@ -88,6 +176,7 @@
                 <input type="date" class="bx-input" id="downpaymentDate">
             </div>
         </div>
+
         <div class="field-row">
             <div class="field-group half">
                 <span class="field-label">On Possession %</span>
@@ -98,9 +187,13 @@
                 <input type="date" class="bx-input" id="possessionDate">
             </div>
         </div>
+
+        <div class="divider"></div>
+        <div class="sub-header">Instalment Schedule</div>
+
         <div class="field-row">
             <div class="field-group half">
-                <span class="field-label">Payment Plan</span>
+                <span class="field-label">Frequency</span>
                 <div class="select-wrapper">
                     <select class="bx-select" id="innerPaymentPlan">
                         <option value="">— Select —</option>
@@ -112,33 +205,42 @@
                 </div>
             </div>
             <div class="field-group half">
-                <span class="field-label">Payment Plan Units</span>
-                <input type="number" class="bx-input" id="paymentPlanUnits" placeholder="0">
+                <span class="field-label">Number of Payments</span>
+                <input type="number" class="bx-input" id="paymentPlanUnits" placeholder="0" min="1">
             </div>
         </div>
     </div>
+
 </div>
 
 <script>
-// ─── IMPORTANT: verify this field key exists on your Deals via crm.deal.fields ───
+// ── IMPORTANT: verify this key via crm.deal.fields in the REST explorer ──
 const STORAGE_FIELD_KEY = "UF_CRM_1781407734871";
 
 let balloonCounter = 0;
 let currentDealId  = null;
 let saveTimeout    = null;
 
-// ─── Balloon Rows ────────────────────────────────────────────────────────────
+// ── Balloon Rows ─────────────────────────────────────────────────────────────
 
-function addBalloonRow() {
+function addBalloonRow(position, amount) {
     balloonCounter++;
     const idx = balloonCounter;
+
+    // Hide empty state
+    const empty = document.getElementById('balloonEmpty');
+    if (empty) empty.style.display = 'none';
+
     const row = document.createElement('div');
     row.className = 'balloon-row';
     row.id = `balloonRow_${idx}`;
     row.innerHTML = `
-        <input type="text"   class="bx-input" placeholder="Position"     data-balloon="position">
-        <input type="number" class="bx-input" placeholder="Amount (PKR)" data-balloon="amount">
-        <button class="btn-remove-balloon" onclick="removeBalloonRow(${idx})" type="button">&times;</button>
+        <input type="text"   class="bx-input" placeholder="Label / Milestone"
+               data-balloon="position" value="${escapeHtml(position || '')}">
+        <input type="number" class="bx-input" placeholder="Amount (PKR)"
+               data-balloon="amount" value="${escapeHtml(amount || '')}">
+        <button class="btn-remove-balloon" onclick="removeBalloonRow(${idx})"
+                type="button" title="Remove">&times;</button>
     `;
     document.getElementById('balloonRows').appendChild(row);
     notifyResize();
@@ -148,11 +250,17 @@ function addBalloonRow() {
 function removeBalloonRow(idx) {
     const row = document.getElementById(`balloonRow_${idx}`);
     if (row) row.remove();
+
+    // Show empty state if no rows left
+    const remaining = document.querySelectorAll('#balloonRows .balloon-row');
+    const empty = document.getElementById('balloonEmpty');
+    if (empty) empty.style.display = remaining.length === 0 ? 'block' : 'none';
+
     notifyResize();
     handleDataChange();
 }
 
-// ─── Plan Change ─────────────────────────────────────────────────────────────
+// ── Plan Toggle ───────────────────────────────────────────────────────────────
 
 function onPlanChange() {
     const plan = document.getElementById('paymentPlan').value;
@@ -161,19 +269,16 @@ function onPlanChange() {
     handleDataChange();
 }
 
-// ─── Collect Form Data ───────────────────────────────────────────────────────
+// ── Collect Data ──────────────────────────────────────────────────────────────
 
 function collectData() {
     const balloons = [];
     document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
-        const posInput = row.querySelector('[data-balloon="position"]');
-        const amtInput = row.querySelector('[data-balloon="amount"]');
-        if (posInput && amtInput) {
-            const pos = posInput.value.trim();
-            const amt = amtInput.value.trim();
-            if (pos || amt) balloons.push({ position: pos, amount: amt });
-        }
+        const pos = row.querySelector('[data-balloon="position"]').value.trim();
+        const amt = row.querySelector('[data-balloon="amount"]').value.trim();
+        if (pos || amt) balloons.push({ position: pos, amount: amt });
     });
+
     return {
         paymentPlan:      document.getElementById('paymentPlan').value,
         discountPct:      document.getElementById('discountPct').value      || '0',
@@ -188,7 +293,7 @@ function collectData() {
     };
 }
 
-// ─── Autosave ────────────────────────────────────────────────────────────────
+// ── Autosave ──────────────────────────────────────────────────────────────────
 
 function handleDataChange() {
     clearTimeout(saveTimeout);
@@ -196,30 +301,29 @@ function handleDataChange() {
 
     saveTimeout = setTimeout(function() {
         if (!currentDealId) {
-            document.getElementById('saveIndicator').innerText = "Not saved — no Deal context.";
+            document.getElementById('saveIndicator').innerText = "No Deal context.";
             return;
         }
 
-        document.getElementById('saveIndicator').innerText = "Autosaving...";
-        const jsonString = JSON.stringify(collectData());
-        const fieldsPayload = {};
-        fieldsPayload[STORAGE_FIELD_KEY] = jsonString;
+        document.getElementById('saveIndicator').innerText = "Saving...";
+        const payload = {};
+        payload[STORAGE_FIELD_KEY] = JSON.stringify(collectData());
 
         BX24.callMethod('crm.deal.update', {
             id:     currentDealId,
-            fields: fieldsPayload
+            fields: payload
         }, function(result) {
             if (result.error()) {
-                document.getElementById('saveIndicator').innerText = "Autosave failed.";
+                document.getElementById('saveIndicator').innerText = "Save failed ✗";
                 console.error('crm.deal.update error:', result.error());
             } else {
-                document.getElementById('saveIndicator').innerText = "Saved to CRM ✓";
+                document.getElementById('saveIndicator').innerText = "Saved ✓";
             }
         });
-    }, 600);
+    }, 700);
 }
 
-// ─── Populate Fields on Load ─────────────────────────────────────────────────
+// ── Populate on Load ──────────────────────────────────────────────────────────
 
 function populateFields(rawValue) {
     if (!rawValue) return;
@@ -228,24 +332,18 @@ function populateFields(rawValue) {
 
         if (data.paymentPlan) {
             document.getElementById('paymentPlan').value = data.paymentPlan;
-            document.getElementById('customBlock').classList.toggle('visible', data.paymentPlan === 'custom');
+            document.getElementById('customBlock').classList.toggle(
+                'visible', data.paymentPlan === 'custom'
+            );
         }
+
         if (data.discountPct) document.getElementById('discountPct').value = data.discountPct;
 
-        if (Array.isArray(data.balloonPayments)) {
+        if (Array.isArray(data.balloonPayments) && data.balloonPayments.length > 0) {
             document.getElementById('balloonRows').innerHTML = '';
             balloonCounter = 0;
-            data.balloonPayments.forEach(function(b, i) {
-                balloonCounter = i + 1;
-                const row = document.createElement('div');
-                row.className = 'balloon-row';
-                row.id = `balloonRow_${balloonCounter}`;
-                row.innerHTML = `
-                    <input type="text"   class="bx-input" data-balloon="position" value="${escapeHtml(b.position || '')}">
-                    <input type="number" class="bx-input" data-balloon="amount"   value="${escapeHtml(b.amount   || '')}">
-                    <button class="btn-remove-balloon" onclick="removeBalloonRow(${balloonCounter})" type="button">&times;</button>
-                `;
-                document.getElementById('balloonRows').appendChild(row);
+            data.balloonPayments.forEach(function(b) {
+                addBalloonRow(b.position, b.amount);
             });
         }
 
@@ -264,33 +362,30 @@ function populateFields(rawValue) {
     }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function escapeHtml(str) {
     return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+        .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-
-// ─── Resize helper ───────────────────────────────────────────────────────────
 
 function notifyResize() {
     if (window.BX24) BX24.fitWindow();
 }
 
-// ─── BX24 Init — reads Deal ID via placement.info() ─────────────────────────
+// ── BX24 Init ─────────────────────────────────────────────────────────────────
 
 BX24.init(function() {
-    // Correct way to get deal context — BX24 sends it here, NOT in URL params
-    const placementInfo = BX24.placement.info();
-    currentDealId = (placementInfo && placementInfo.options)
-        ? (placementInfo.options.ID || placementInfo.options.id || null)
+    const info = BX24.placement.info();
+    currentDealId = (info && info.options)
+        ? (info.options.ID || info.options.id || null)
         : null;
 
     if (currentDealId) {
         BX24.callMethod('crm.deal.get', { id: currentDealId }, function(result) {
             if (result.error()) {
-                document.getElementById('saveIndicator').innerText = "Data link error.";
+                document.getElementById('saveIndicator').innerText = "Load error ✗";
                 console.error('crm.deal.get error:', result.error());
             } else {
                 const dealData = result.data();
@@ -302,14 +397,13 @@ BX24.init(function() {
             }
         });
     } else {
-        document.getElementById('saveIndicator').innerText = "Outside Deal context.";
-        console.warn("No Deal ID found in placement.info(). placementInfo =", placementInfo);
+        document.getElementById('saveIndicator').innerText = "No Deal context.";
+        console.warn("placement.info() returned no ID:", info);
     }
 
     notifyResize();
 });
 
-// ─── Global input listeners ──────────────────────────────────────────────────
 document.addEventListener('input',  handleDataChange);
 document.addEventListener('change', handleDataChange);
 </script>
