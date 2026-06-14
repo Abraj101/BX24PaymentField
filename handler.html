@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Section</title>
+    <script src="https://api.bitrix24.com/api/v1/"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; font-size: 13px; color: #333; background: transparent; overflow-x: hidden; }
+        .bx-section { background: #fff; border-radius: 8px; padding-bottom: 12px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 8px; border-bottom: 1px solid #f2f4f7; margin-bottom: 4px; }
+        .section-title { font-size: 13px; font-weight: 700; color: #2fc6f6; text-transform: uppercase; letter-spacing: 0.02em; }
+        .field-row { display: flex; gap: 12px; padding: 8px 16px; align-items: flex-end; }
+        .field-group { display: flex; flex-direction: column; flex: 1; gap: 6px; }
+        .field-group.half { flex: 0 0 calc(50% - 6px); }
+        .field-label { font-size: 11px; font-weight: 700; color: #a1a6b1; text-transform: uppercase; }
+        .bx-input, .bx-select { width: 100%; height: 38px; padding: 0 12px; border: 1px solid #cbd0da; border-radius: 4px; color: #424956; background: #fff; outline: none; transition: border-color 0.15s; appearance: none; -webkit-appearance: none; }
+        .bx-input:focus, .bx-select:focus { border-color: #2fc6f6; }
+        .select-wrapper { position: relative; }
+        .select-wrapper::after { content: ""; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #a1a6b1; pointer-events: none; }
+        .balloon-section { padding: 12px 16px 4px; }
+        .balloon-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .balloon-title { font-size: 12px; font-weight: 700; color: #535c69; }
+        .btn-add-balloon { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #2fc6f6; background: transparent; color: #2fc6f6; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; outline: none; }
+        .btn-add-balloon:hover { background-color: #2fc6f6; color: #fff; }
+        .balloon-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+        .balloon-row .bx-input { flex: 1; height: 38px; background: #f8fafc; border: 1px solid #ddecfa; }
+        .btn-remove-balloon { background: transparent; border: none; color: #ff5c5c; font-size: 22px; cursor: pointer; padding: 0 4px; line-height: 1; }
+        .custom-fields-block { border-top: 1px solid #f2f4f7; margin-top: 8px; padding-top: 4px; display: none; }
+        .custom-fields-block.visible { display: block; }
+        .custom-block-label { font-size: 11px; font-weight: 700; color: #2fc6f6; text-transform: uppercase; padding: 10px 16px 2px; }
+        .divider { height: 1px; background: #f2f4f7; margin: 8px 0; }
+        .save-indicator { font-size: 11px; color: #2fc6f6; font-weight: 600; padding: 2px 16px; text-align: right; min-height: 16px; }
+    </style>
+</head>
+<body>
+<div class="bx-section" id="mainContainer">
+    <div class="section-header">
+        <span class="section-title">Payment Details</span>
+    </div>
+    <div class="save-indicator" id="saveIndicator">Connecting...</div>
+
+    <div class="field-row">
+        <div class="field-group">
+            <span class="field-label">Payment Plan</span>
+            <div class="select-wrapper">
+                <select class="bx-select" id="paymentPlan" onchange="onPlanChange()">
+                    <option value="">— Select —</option>
+                    <option value="60_40">60/40</option>
+                    <option value="3_years">3 Years</option>
+                    <option value="5_years">5 Years</option>
+                    <option value="full_payment">Full Payment</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+        </div>
+        <div class="field-group half">
+            <span class="field-label">Discount %</span>
+            <input type="number" class="bx-input" id="discountPct" placeholder="0" min="0" max="100" step="0.01">
+        </div>
+    </div>
+
+    <div class="balloon-section">
+        <div class="balloon-header">
+            <span class="balloon-title">Balloon Payments</span>
+            <button class="btn-add-balloon" onclick="addBalloonRow()" type="button">+</button>
+        </div>
+        <div id="balloonRows"></div>
+    </div>
+
+    <div class="custom-fields-block" id="customBlock">
+        <div class="divider"></div>
+        <div class="custom-block-label">Custom Plan Details</div>
+        <div class="field-row">
+            <div class="field-group">
+                <span class="field-label">Total Amount</span>
+                <input type="number" class="bx-input" id="totalAmount" placeholder="0">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">Downpayment %</span>
+                <input type="number" class="bx-input" id="downpaymentPct" placeholder="0">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Downpayment Date</span>
+                <input type="date" class="bx-input" id="downpaymentDate">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">On Possession %</span>
+                <input type="number" class="bx-input" id="possessionPct" placeholder="0">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">On Possession Date</span>
+                <input type="date" class="bx-input" id="possessionDate">
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">Payment Plan</span>
+                <div class="select-wrapper">
+                    <select class="bx-select" id="innerPaymentPlan">
+                        <option value="">— Select —</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="biannually">Biannually</option>
+                        <option value="annually">Annually</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Payment Plan Units</span>
+                <input type="number" class="bx-input" id="paymentPlanUnits" placeholder="0">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── IMPORTANT: verify this field key exists on your Deals via crm.deal.fields ───
+const STORAGE_FIELD_KEY = "UF_CRM_1781407734871";
+
+let balloonCounter = 0;
+let currentDealId  = null;
+let saveTimeout    = null;
+
+// ─── Balloon Rows ────────────────────────────────────────────────────────────
+
+function addBalloonRow() {
+    balloonCounter++;
+    const idx = balloonCounter;
+    const row = document.createElement('div');
+    row.className = 'balloon-row';
+    row.id = `balloonRow_${idx}`;
+    row.innerHTML = `
+        <input type="text"   class="bx-input" placeholder="Position"     data-balloon="position">
+        <input type="number" class="bx-input" placeholder="Amount (PKR)" data-balloon="amount">
+        <button class="btn-remove-balloon" onclick="removeBalloonRow(${idx})" type="button">&times;</button>
+    `;
+    document.getElementById('balloonRows').appendChild(row);
+    notifyResize();
+    handleDataChange();
+}
+
+function removeBalloonRow(idx) {
+    const row = document.getElementById(`balloonRow_${idx}`);
+    if (row) row.remove();
+    notifyResize();
+    handleDataChange();
+}
+
+// ─── Plan Change ─────────────────────────────────────────────────────────────
+
+function onPlanChange() {
+    const plan = document.getElementById('paymentPlan').value;
+    document.getElementById('customBlock').classList.toggle('visible', plan === 'custom');
+    notifyResize();
+    handleDataChange();
+}
+
+// ─── Collect Form Data ───────────────────────────────────────────────────────
+
+function collectData() {
+    const balloons = [];
+    document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
+        const posInput = row.querySelector('[data-balloon="position"]');
+        const amtInput = row.querySelector('[data-balloon="amount"]');
+        if (posInput && amtInput) {
+            const pos = posInput.value.trim();
+            const amt = amtInput.value.trim();
+            if (pos || amt) balloons.push({ position: pos, amount: amt });
+        }
+    });
+    return {
+        paymentPlan:      document.getElementById('paymentPlan').value,
+        discountPct:      document.getElementById('discountPct').value      || '0',
+        balloonPayments:  balloons,
+        totalAmount:      document.getElementById('totalAmount').value      || '',
+        downpaymentPct:   document.getElementById('downpaymentPct').value   || '',
+        downpaymentDate:  document.getElementById('downpaymentDate').value  || '',
+        possessionPct:    document.getElementById('possessionPct').value    || '',
+        possessionDate:   document.getElementById('possessionDate').value   || '',
+        innerPaymentPlan: document.getElementById('innerPaymentPlan').value || '',
+        paymentPlanUnits: document.getElementById('paymentPlanUnits').value || ''
+    };
+}
+
+// ─── Autosave ────────────────────────────────────────────────────────────────
+
+function handleDataChange() {
+    clearTimeout(saveTimeout);
+    document.getElementById('saveIndicator').innerText = "Typing...";
+
+    saveTimeout = setTimeout(function() {
+        if (!currentDealId) {
+            document.getElementById('saveIndicator').innerText = "Not saved — no Deal context.";
+            return;
+        }
+
+        document.getElementById('saveIndicator').innerText = "Autosaving...";
+        const jsonString = JSON.stringify(collectData());
+        const fieldsPayload = {};
+        fieldsPayload[STORAGE_FIELD_KEY] = jsonString;
+
+        BX24.callMethod('crm.deal.update', {
+            id:     currentDealId,
+            fields: fieldsPayload
+        }, function(result) {
+            if (result.error()) {
+                document.getElementById('saveIndicator').innerText = "Autosave failed.";
+                console.error('crm.deal.update error:', result.error());
+            } else {
+                document.getElementById('saveIndicator').innerText = "Saved to CRM ✓";
+            }
+        });
+    }, 600);
+}
+
+// ─── Populate Fields on Load ─────────────────────────────────────────────────
+
+function populateFields(rawValue) {
+    if (!rawValue) return;
+    try {
+        const data = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+
+        if (data.paymentPlan) {
+            document.getElementById('paymentPlan').value = data.paymentPlan;
+            document.getElementById('customBlock').classList.toggle('visible', data.paymentPlan === 'custom');
+        }
+        if (data.discountPct) document.getElementById('discountPct').value = data.discountPct;
+
+        if (Array.isArray(data.balloonPayments)) {
+            document.getElementById('balloonRows').innerHTML = '';
+            balloonCounter = 0;
+            data.balloonPayments.forEach(function(b, i) {
+                balloonCounter = i + 1;
+                const row = document.createElement('div');
+                row.className = 'balloon-row';
+                row.id = `balloonRow_${balloonCounter}`;
+                row.innerHTML = `
+                    <input type="text"   class="bx-input" data-balloon="position" value="${escapeHtml(b.position || '')}">
+                    <input type="number" class="bx-input" data-balloon="amount"   value="${escapeHtml(b.amount   || '')}">
+                    <button class="btn-remove-balloon" onclick="removeBalloonRow(${balloonCounter})" type="button">&times;</button>
+                `;
+                document.getElementById('balloonRows').appendChild(row);
+            });
+        }
+
+        ['totalAmount','downpaymentPct','downpaymentDate',
+         'possessionPct','possessionDate','paymentPlanUnits'].forEach(function(id) {
+            if (data[id] !== undefined && data[id] !== '') {
+                document.getElementById(id).value = data[id];
+            }
+        });
+
+        if (data.innerPaymentPlan) {
+            document.getElementById('innerPaymentPlan').value = data.innerPaymentPlan;
+        }
+    } catch(e) {
+        console.error("populateFields parse error:", e);
+    }
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+// ─── Resize helper ───────────────────────────────────────────────────────────
+
+function notifyResize() {
+    if (window.BX24) BX24.fitWindow();
+}
+
+// ─── BX24 Init — reads Deal ID via placement.info() ─────────────────────────
+
+BX24.init(function() {
+    // Correct way to get deal context — BX24 sends it here, NOT in URL params
+    const placementInfo = BX24.placement.info();
+    currentDealId = (placementInfo && placementInfo.options)
+        ? (placementInfo.options.ID || placementInfo.options.id || null)
+        : null;
+
+    if (currentDealId) {
+        BX24.callMethod('crm.deal.get', { id: currentDealId }, function(result) {
+            if (result.error()) {
+                document.getElementById('saveIndicator').innerText = "Data link error.";
+                console.error('crm.deal.get error:', result.error());
+            } else {
+                const dealData = result.data();
+                if (dealData && dealData[STORAGE_FIELD_KEY]) {
+                    populateFields(dealData[STORAGE_FIELD_KEY]);
+                }
+                document.getElementById('saveIndicator').innerText = "Ready ✓";
+                notifyResize();
+            }
+        });
+    } else {
+        document.getElementById('saveIndicator').innerText = "Outside Deal context.";
+        console.warn("No Deal ID found in placement.info(). placementInfo =", placementInfo);
+    }
+
+    notifyResize();
+});
+
+// ─── Global input listeners ──────────────────────────────────────────────────
+document.addEventListener('input',  handleDataChange);
+document.addEventListener('change', handleDataChange);
+</script>
+</body>
+</html>
