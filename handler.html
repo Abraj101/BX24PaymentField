@@ -245,6 +245,10 @@ const PLAN_LABELS = {
     '5_years': '5 Years', 'full_payment': 'Full Payment'
 };
 
+// Safety net: if auto-detect by field label ever fails, paste the property IDs
+// here from the console diagnostic — e.g. { '60_40': 121, '3_years': 183, ... }
+const PLAN_PROPERTY_OVERRIDE = {};
+
 const _productCache = {};   // productId -> product object
 const _propMapCache = {};   // iblockId  -> [{id, name}]
 let   amountTimeout = null;
@@ -270,7 +274,8 @@ function callBX(method, params) {
 
 // Pull a single property value off a catalog.product.get product object
 function extractPropValue(product, propId) {
-    const keys = ['property' + propId, 'PROPERTY_' + propId, String(propId)];
+    const keys = ['property' + propId, 'property_' + propId,
+                  'PROPERTY_' + propId, String(propId)];
     for (let i = 0; i < keys.length; i++) {
         let v = product[keys[i]];
         if (v === undefined || v === null) continue;
@@ -282,6 +287,33 @@ function extractPropValue(product, propId) {
     return null;
 }
 
+// Return the first array found in a response object (key-agnostic)
+function firstArray(obj) {
+    if (Array.isArray(obj)) return obj;
+    if (obj && typeof obj === 'object') {
+        for (const k in obj) if (Array.isArray(obj[k])) return obj[k];
+    }
+    return [];
+}
+
+// List every product field across all catalogs (paginated, cached, no iblock filter)
+async function fetchAllProductProperties() {
+    if (_propMapCache.all) return _propMapCache.all;
+    let all = [], start = 0, guard = 0;
+    while (guard++ < 6) {
+        const pdata = await callBX('catalog.productProperty.list',
+            { select: ['id', 'name', 'iblockId'], start: start });
+        const batch = firstArray(pdata);
+        all = all.concat(batch);
+        if (batch.length < 50) break;   // last page
+        start += 50;
+    }
+    _propMapCache.all = all;
+    console.log('[PaymentWidget] product fields found:', all.length,
+        all.map(function(p) { return (p.id || p.ID) + ' = ' + (p.name || p.NAME); }));
+    return all;
+}
+
 // Resolve the plan price for one product (with per-session caching)
 async function getProductPlanPrice(productId, plan) {
     let product = _productCache[productId];
@@ -289,39 +321,37 @@ async function getProductPlanPrice(productId, plan) {
         const data = await callBX('catalog.product.get', { id: productId });
         product = (data && data.product) ? data.product : data;
         _productCache[productId] = product;
-        console.log('[PaymentWidget] product', productId, product);   // first-run check
-    }
-    const iblockId = product.iblockId || product.iblockID || product.IBLOCK_ID;
-
-    const cacheKey = iblockId || '_all';
-    let props = _propMapCache[cacheKey];
-    if (!props) {
-        const pdata = await callBX('catalog.productProperty.list', {
-            select: ['id', 'name'],
-            filter: iblockId ? { iblockId: iblockId } : {}
-        });
-        props = (pdata && pdata.properties) ? pdata.properties : [];
-        _propMapCache[cacheKey] = props;
+        const pk = Object.keys(product).filter(function(k) { return /^property/i.test(k); });
+        console.log('[PaymentWidget] product', productId, product);
+        console.log('[PaymentWidget] product property values:',
+            pk.map(function(k) { return k + ' = ' + JSON.stringify(product[k]); }));
     }
 
+    // 1) Manual override wins (if configured)
+    if (PLAN_PROPERTY_OVERRIDE[plan]) {
+        return extractPropValue(product, PLAN_PROPERTY_OVERRIDE[plan]);
+    }
+
+    // 2) Auto-detect by field label
+    const props = await fetchAllProductProperties();
     const keywords = PLAN_PRICE_KEYWORDS[plan] || [];
     let matches = props.filter(function(p) {
-        const n = (p.name || '').toLowerCase();
+        const n = (p.name || p.NAME || '').toLowerCase();
         return keywords.some(function(k) { return n.indexOf(k) !== -1; });
     });
     if (matches.length > 1) {   // prefer fields that look like a price field
         const priced = matches.filter(function(p) {
-            return (p.name || '').toLowerCase().indexOf('price') !== -1;
+            return (p.name || p.NAME || '').toLowerCase().indexOf('price') !== -1;
         });
         if (priced.length) matches = priced;
     }
     if (!matches.length) {
-        console.warn('[PaymentWidget] no price field matched plan "' + plan +
-            '". Available product fields:',
-            props.map(function(p) { return p.id + ' = ' + p.name; }));
+        console.warn('[PaymentWidget] no field matched plan "' + plan +
+            '". Check the field list logged above, then paste the right id into ' +
+            'PLAN_PROPERTY_OVERRIDE.');
         return null;
     }
-    return extractPropValue(product, matches[0].id);
+    return extractPropValue(product, matches[0].id || matches[0].ID);
 }
 
 // Read deal products, sum plan prices, apply capped discount, write the amount
