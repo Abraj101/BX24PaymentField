@@ -111,6 +111,12 @@
             text-align: center; padding: 8px 0 4px;
             font-style: italic;
         }
+
+        /* ── Auto-calculated amount note ── */
+        .amount-status {
+            font-size: 12px; color: #8e99a4; font-weight: 600;
+            padding: 2px 20px 6px; display: none;
+        }
     </style>
 </head>
 <body>
@@ -142,6 +148,9 @@
                    placeholder="0" min="0" max="100" step="0.01">
         </div>
     </div>
+
+    <!-- ── Auto-calculated Amount note ── -->
+    <div class="amount-status" id="amountStatus"></div>
 
     <!-- ── Balloon Payments ── -->
     <div class="balloon-section">
@@ -221,6 +230,169 @@ let balloonCounter = 0;
 let currentDealId  = null;
 let saveTimeout    = null;
 
+// ── Amount Auto-Calculation (catalog plan prices → Deal amount) ───────────────
+const MAX_DISCOUNT = 15;   // hard cap for 60/40, 3yr, 5yr, full payment
+
+// Keywords that identify each product price field by its (lower-cased) label
+const PLAN_PRICE_KEYWORDS = {
+    '60_40':        ['60/40'],
+    '3_years':      ['3 yr', '3 years', '3yr'],
+    '5_years':      ['5 yr', '5 years', '5yr'],
+    'full_payment': ['upfront', '100%', 'full payment']
+};
+const PLAN_LABELS = {
+    '60_40': '60/40', '3_years': '3 Years',
+    '5_years': '5 Years', 'full_payment': 'Full Payment'
+};
+
+const _productCache = {};   // productId -> product object
+const _propMapCache = {};   // iblockId  -> [{id, name}]
+let   amountTimeout = null;
+
+function setAmountStatus(msg, isError) {
+    const el = document.getElementById('amountStatus');
+    if (!el) return;
+    el.textContent  = msg || '';
+    el.style.color  = isError ? '#c62828' : '#8e99a4';
+    el.style.display = msg ? 'block' : 'none';
+    notifyResize();
+}
+
+// Promise wrapper around BX24.callMethod
+function callBX(method, params) {
+    return new Promise(function(resolve, reject) {
+        BX24.callMethod(method, params, function(res) {
+            if (res.error()) reject(res.error());
+            else resolve(res.data());
+        });
+    });
+}
+
+// Pull a single property value off a catalog.product.get product object
+function extractPropValue(product, propId) {
+    const keys = ['property' + propId, 'PROPERTY_' + propId, String(propId)];
+    for (let i = 0; i < keys.length; i++) {
+        let v = product[keys[i]];
+        if (v === undefined || v === null) continue;
+        if (Array.isArray(v)) v = v[0];
+        if (v && typeof v === 'object') v = (v.value !== undefined ? v.value : v.VALUE);
+        const num = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+        return isNaN(num) ? null : num;
+    }
+    return null;
+}
+
+// Resolve the plan price for one product (with per-session caching)
+async function getProductPlanPrice(productId, plan) {
+    let product = _productCache[productId];
+    if (!product) {
+        const data = await callBX('catalog.product.get', { id: productId });
+        product = (data && data.product) ? data.product : data;
+        _productCache[productId] = product;
+        console.log('[PaymentWidget] product', productId, product);   // first-run check
+    }
+    const iblockId = product.iblockId || product.iblockID || product.IBLOCK_ID;
+
+    const cacheKey = iblockId || '_all';
+    let props = _propMapCache[cacheKey];
+    if (!props) {
+        const pdata = await callBX('catalog.productProperty.list', {
+            select: ['id', 'name'],
+            filter: iblockId ? { iblockId: iblockId } : {}
+        });
+        props = (pdata && pdata.properties) ? pdata.properties : [];
+        _propMapCache[cacheKey] = props;
+    }
+
+    const keywords = PLAN_PRICE_KEYWORDS[plan] || [];
+    let matches = props.filter(function(p) {
+        const n = (p.name || '').toLowerCase();
+        return keywords.some(function(k) { return n.indexOf(k) !== -1; });
+    });
+    if (matches.length > 1) {   // prefer fields that look like a price field
+        const priced = matches.filter(function(p) {
+            return (p.name || '').toLowerCase().indexOf('price') !== -1;
+        });
+        if (priced.length) matches = priced;
+    }
+    if (!matches.length) {
+        console.warn('[PaymentWidget] no price field matched plan "' + plan +
+            '". Available product fields:',
+            props.map(function(p) { return p.id + ' = ' + p.name; }));
+        return null;
+    }
+    return extractPropValue(product, matches[0].id);
+}
+
+// Read deal products, sum plan prices, apply capped discount, write the amount
+async function recalcDealAmount() {
+    const plan = document.getElementById('paymentPlan').value;
+    if (!currentDealId) return;
+    if (!plan || plan === 'custom') return;   // custom plan is fully manual
+
+    setAmountStatus('Calculating amount…');
+    try {
+        const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
+        const rows = Array.isArray(rowsData) ? rowsData : (rowsData.result || []);
+        if (!rows.length) {
+            setAmountStatus('No products on this deal — add the unit in the Products tab.', true);
+            return;
+        }
+
+        let total = 0;
+        const missing = [];
+        for (let i = 0; i < rows.length; i++) {
+            const pid = rows[i].PRODUCT_ID || rows[i].productId;
+            const qty = parseFloat(rows[i].QUANTITY || rows[i].quantity || 1) || 1;
+            if (!pid) continue;
+            const price = await getProductPlanPrice(pid, plan);
+            if (price === null) {
+                missing.push(rows[i].PRODUCT_NAME || rows[i].productName || ('#' + pid));
+                continue;
+            }
+            total += price * qty;
+        }
+
+        if (missing.length) {
+            setAmountStatus('No "' + (PLAN_LABELS[plan] || plan) +
+                '" price found for: ' + missing.join(', '), true);
+            return;
+        }
+
+        let disc = parseFloat(document.getElementById('discountPct').value) || 0;
+        if (disc < 0) disc = 0;
+        if (disc > MAX_DISCOUNT) disc = MAX_DISCOUNT;
+
+        const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
+
+        await callBX('crm.deal.update', {
+            id: currentDealId,
+            fields: { OPPORTUNITY: finalAmount, IS_MANUAL_OPPORTUNITY: 'Y' }
+        });
+
+        setAmountStatus('Amount set: ' + finalAmount.toLocaleString() +
+            (disc ? ('  (−' + disc + '%)') : ''));
+    } catch (e) {
+        console.error('[PaymentWidget] recalcDealAmount error:', e);
+        setAmountStatus('Could not calculate amount (see console).', true);
+    }
+}
+
+function scheduleRecalc() {
+    clearTimeout(amountTimeout);
+    amountTimeout = setTimeout(recalcDealAmount, 700);
+}
+
+// Clamp the discount field for non-custom plans
+function enforceDiscountCap() {
+    const plan = document.getElementById('paymentPlan').value;
+    const d = document.getElementById('discountPct');
+    if (plan && plan !== 'custom' && parseFloat(d.value) > MAX_DISCOUNT) {
+        d.value = MAX_DISCOUNT;
+        setAmountStatus('Max discount for this plan is ' + MAX_DISCOUNT + '%.', true);
+    }
+}
+
 // ── Balloon Rows ─────────────────────────────────────────────────────────────
 
 function addBalloonRow(position, amount) {
@@ -265,8 +437,11 @@ function removeBalloonRow(idx) {
 function onPlanChange() {
     const plan = document.getElementById('paymentPlan').value;
     document.getElementById('customBlock').classList.toggle('visible', plan === 'custom');
+    if (plan === 'custom') setAmountStatus('');   // manual mode — hide auto-calc note
+    enforceDiscountCap();
     notifyResize();
     handleDataChange();
+    scheduleRecalc();
 }
 
 // ── Collect Data ──────────────────────────────────────────────────────────────
@@ -406,6 +581,12 @@ BX24.init(function() {
 
 document.addEventListener('input',  handleDataChange);
 document.addEventListener('change', handleDataChange);
+
+// Discount field: enforce the 15% cap and re-calculate the amount
+document.getElementById('discountPct').addEventListener('input', function() {
+    enforceDiscountCap();
+    scheduleRecalc();
+});
 </script>
 </body>
 </html>
