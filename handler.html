@@ -245,9 +245,14 @@ const PLAN_LABELS = {
     '5_years': '5 Years', 'full_payment': 'Full Payment'
 };
 
-// Safety net: if auto-detect by field label ever fails, paste the property IDs
-// here from the console diagnostic — e.g. { '60_40': 121, '3_years': 183, ... }
-const PLAN_PROPERTY_OVERRIDE = {};
+// Confirmed price property IDs on the Dubai Inventory catalog (catalog-wide,
+// same on every unit). Values are money fields stored as "640000.00|AED".
+const PLAN_PROPERTY_OVERRIDE = {
+    '60_40':        263,   // Price: 60/40
+    '3_years':      265,   // Price: 50/10/40 (3 Yrs Post Handover)
+    '5_years':      267,   // Price: 50/10/40 (5 Yrs Post Handover)
+    'full_payment': 269    // Price: 100% Upfront Unfurnished
+};
 
 const _productCache = {};   // productId -> product object
 const _propMapCache = {};   // iblockId  -> [{id, name}]
