@@ -117,6 +117,27 @@
             font-size: 12px; color: #8e99a4; font-weight: 600;
             padding: 2px 20px 6px; display: none;
         }
+
+        /* ── Furnished toggle ── */
+        .furnished-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 20px 4px;
+        }
+        .furnished-label { font-size: 12px; font-weight: 700; color: #535c69; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .switch .slider {
+            position: absolute; cursor: pointer; inset: 0;
+            background: #cfd6df; border-radius: 24px; transition: background 0.15s;
+        }
+        .switch .slider:before {
+            content: ""; position: absolute; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background: #fff; border-radius: 50%;
+            transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .switch input:checked + .slider { background: #2fc6f6; }
+        .switch input:checked + .slider:before { transform: translateX(20px); }
+        .furnished-state { font-size: 12px; font-weight: 600; color: #8e99a4; min-width: 28px; text-align: right; }
     </style>
 </head>
 <body>
@@ -163,6 +184,18 @@
         </div>
     </div>
 
+    <!-- ── Furnished toggle (always visible) ── -->
+    <div class="furnished-row">
+        <span class="furnished-label">Furnished</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="furnished-state" id="furnishedState">No</span>
+            <label class="switch">
+                <input type="checkbox" id="furnishedToggle" onchange="onFurnishedChange()">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
     <!-- ── Schedule Dates Block (60/40, 3yr, 5yr) ── -->
     <div class="custom-fields-block" id="installmentBlock">
         <div class="divider"></div>
@@ -198,7 +231,7 @@
 
         <div class="field-row">
             <div class="field-group">
-                <span class="field-label">Total Amount (PKR)</span>
+                <span class="field-label">Total Amount (AED)</span>
                 <input type="number" class="bx-input" id="totalAmount" placeholder="0">
             </div>
         </div>
@@ -496,7 +529,7 @@ function addBalloonRow(position, amount) {
     row.innerHTML = `
         <input type="text"   class="bx-input" placeholder="Label / Milestone"
                data-balloon="position" value="${escapeHtml(position || '')}">
-        <input type="number" class="bx-input" placeholder="Amount (PKR)"
+        <input type="number" class="bx-input" placeholder="Amount (AED)"
                data-balloon="amount" value="${escapeHtml(amount || '')}">
         <button class="btn-remove-balloon" onclick="removeBalloonRow(${idx})"
                 type="button" title="Remove">&times;</button>
@@ -517,6 +550,14 @@ function removeBalloonRow(idx) {
 
     notifyResize();
     handleDataChange();
+}
+
+// ── Furnished toggle ──────────────────────────────────────────────────────────
+
+function onFurnishedChange() {
+    const on = document.getElementById('furnishedToggle').checked;
+    document.getElementById('furnishedState').innerText = on ? 'Yes' : 'No';
+    // Autosave is handled by the global 'change' listener.
 }
 
 // ── Plan Toggle ───────────────────────────────────────────────────────────────
@@ -572,7 +613,8 @@ function collectData() {
     const data = {
         paymentPlan:     plan,
         discountPct:     document.getElementById('discountPct').value || '0',
-        balloonPayments: balloons
+        balloonPayments: balloons,
+        furnished:       document.getElementById('furnishedToggle').checked ? 'Yes' : 'No'
     };
 
     // Custom plan details are stored ONLY while Custom is the selected plan
@@ -648,6 +690,11 @@ function populateFields(rawValue) {
         }
 
         if (data.discountPct) document.getElementById('discountPct').value = data.discountPct;
+
+        // Restore Furnished toggle (defaults to No / off)
+        var furnishedOn = (data.furnished === 'Yes' || data.furnished === true);
+        document.getElementById('furnishedToggle').checked = furnishedOn;
+        document.getElementById('furnishedState').innerText = furnishedOn ? 'Yes' : 'No';
 
         if (Array.isArray(data.balloonPayments) && data.balloonPayments.length > 0) {
             document.getElementById('balloonRows').innerHTML = '';
