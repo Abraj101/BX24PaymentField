@@ -247,6 +247,39 @@
             </div>
         </div>
 
+        <!-- During Construction -->
+        <div class="divider"></div>
+        <div class="sub-header">During Construction</div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">During Construction %</span>
+                <input type="number" class="bx-input" id="dcPct" placeholder="0">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Frequency</span>
+                <div class="select-wrapper">
+                    <select class="bx-select" id="dcFreq">
+                        <option value="">— Select —</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="biannually">Biannually</option>
+                        <option value="annually">Annually</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">No of Payments</span>
+                <input type="number" class="bx-input" id="dcPayments" placeholder="0" min="1">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Installment Start Date</span>
+                <input type="date" class="bx-input" id="dcStartDate">
+            </div>
+        </div>
+
+        <!-- On Possession -->
         <div class="field-row">
             <div class="field-group half">
                 <span class="field-label">On Possession %</span>
@@ -258,14 +291,18 @@
             </div>
         </div>
 
+        <!-- Post Handover -->
         <div class="divider"></div>
-        <div class="sub-header">Instalment Schedule</div>
-
+        <div class="sub-header">Post Handover</div>
         <div class="field-row">
+            <div class="field-group half">
+                <span class="field-label">Post Handover %</span>
+                <input type="number" class="bx-input" id="phPct" placeholder="0">
+            </div>
             <div class="field-group half">
                 <span class="field-label">Frequency</span>
                 <div class="select-wrapper">
-                    <select class="bx-select" id="innerPaymentPlan">
+                    <select class="bx-select" id="phFreq">
                         <option value="">— Select —</option>
                         <option value="monthly">Monthly</option>
                         <option value="quarterly">Quarterly</option>
@@ -274,9 +311,15 @@
                     </select>
                 </div>
             </div>
+        </div>
+        <div class="field-row">
             <div class="field-group half">
-                <span class="field-label">Number of Payments</span>
-                <input type="number" class="bx-input" id="paymentPlanUnits" placeholder="0" min="1">
+                <span class="field-label">No of Payments</span>
+                <input type="number" class="bx-input" id="phPayments" placeholder="0" min="1">
+            </div>
+            <div class="field-group half">
+                <span class="field-label">Installment Start Date</span>
+                <input type="date" class="bx-input" id="phStartDate">
             </div>
         </div>
     </div>
@@ -286,6 +329,18 @@
 <script>
 // ── IMPORTANT: verify this key via crm.deal.fields in the REST explorer ──
 const STORAGE_FIELD_KEY = "UF_CRM_1781355927497";
+const PLAN_FIELD_KEY    = "UF_CRM_1781639983191";   // hidden dropdown: Not Selected / Standard / Custom
+// Enum option values for the plan dropdown (from the field definition)
+const PLAN_ENUM = {
+    standard:    '1285',   // 60/40, 3 Years, 5 Years, Full Payment
+    custom:      '1287',   // Custom
+    notSelected: ''        // empty default = "not selected"
+};
+function planEnumValue(plan) {
+    if (!plan)              return PLAN_ENUM.notSelected;
+    if (plan === 'custom')  return PLAN_ENUM.custom;
+    return PLAN_ENUM.standard;
+}
 
 let balloonCounter = 0;
 let currentDealId  = null;
@@ -303,7 +358,7 @@ const PLAN_PRICE_KEYWORDS = {
 };
 const PLAN_LABELS = {
     '60_40': '60/40', '3_years': '3 Years',
-    '5_years': '5 Years', 'full_payment': 'Full Payment'
+    '5_years': '5 Years', 'full_payment': 'Full Payment', 'custom': 'Custom'
 };
 
 // Confirmed price property IDs on the Dubai Inventory catalog (catalog-wide,
@@ -527,7 +582,7 @@ function addBalloonRow(position, amount) {
     row.className = 'balloon-row';
     row.id = `balloonRow_${idx}`;
     row.innerHTML = `
-        <input type="text"   class="bx-input" placeholder="Label / Milestone"
+        <input type="text"   class="bx-input" placeholder="Installment Number"
                data-balloon="position" value="${escapeHtml(position || '')}">
         <input type="number" class="bx-input" placeholder="Amount (AED)"
                data-balloon="amount" value="${escapeHtml(amount || '')}">
@@ -565,8 +620,9 @@ function onFurnishedChange() {
 // ── Plan field groups ─────────────────────────────────────────────────────────
 const INSTALLMENT_PLANS  = ['60_40', '3_years', '5_years'];
 const CUSTOM_FIELDS      = ['totalAmount', 'downpaymentPct', 'downpaymentDate',
-                            'possessionPct', 'possessionDate', 'paymentPlanUnits',
-                            'innerPaymentPlan'];
+                            'dcPct', 'dcFreq', 'dcPayments', 'dcStartDate',
+                            'possessionPct', 'possessionDate',
+                            'phPct', 'phFreq', 'phPayments', 'phStartDate'];
 const INSTALLMENT_FIELDS = ['downpaymentStartDate', 'installmentStartDate'];
 const FULLPAYMENT_FIELDS = ['paymentDate'];
 
@@ -619,13 +675,24 @@ function collectData() {
 
     // Custom plan details are stored ONLY while Custom is the selected plan
     if (plan === 'custom') {
-        data.totalAmount      = document.getElementById('totalAmount').value      || '';
-        data.downpaymentPct   = document.getElementById('downpaymentPct').value   || '';
-        data.downpaymentDate  = document.getElementById('downpaymentDate').value  || '';
-        data.possessionPct    = document.getElementById('possessionPct').value    || '';
-        data.possessionDate   = document.getElementById('possessionDate').value   || '';
-        data.innerPaymentPlan = document.getElementById('innerPaymentPlan').value || '';
-        data.paymentPlanUnits = document.getElementById('paymentPlanUnits').value || '';
+        data.totalAmount     = document.getElementById('totalAmount').value     || '';
+        data.downpaymentPct  = document.getElementById('downpaymentPct').value  || '';
+        data.downpaymentDate = document.getElementById('downpaymentDate').value || '';
+
+        // During Construction
+        data.duringConstructionPct       = document.getElementById('dcPct').value       || '';
+        data.duringConstructionFreq      = document.getElementById('dcFreq').value      || '';
+        data.duringConstructionPayments  = document.getElementById('dcPayments').value  || '';
+        data.duringConstructionStartDate = document.getElementById('dcStartDate').value || '';
+
+        data.possessionPct   = document.getElementById('possessionPct').value   || '';
+        data.possessionDate  = document.getElementById('possessionDate').value  || '';
+
+        // Post Handover
+        data.postHandoverPct       = document.getElementById('phPct').value       || '';
+        data.postHandoverFreq      = document.getElementById('phFreq').value      || '';
+        data.postHandoverPayments  = document.getElementById('phPayments').value  || '';
+        data.postHandoverStartDate = document.getElementById('phStartDate').value || '';
     }
 
     // Schedule dates stored only for 60/40, 3yr, 5yr
@@ -655,8 +722,10 @@ function handleDataChange() {
         }
 
         document.getElementById('saveIndicator').innerText = "Saving...";
+        const data = collectData();
         const payload = {};
-        payload[STORAGE_FIELD_KEY] = JSON.stringify(collectData());
+        payload[STORAGE_FIELD_KEY] = JSON.stringify(data);
+        payload[PLAN_FIELD_KEY]    = planEnumValue(data.paymentPlan);
 
         BX24.callMethod('crm.deal.update', {
             id:     currentDealId,
@@ -706,16 +775,18 @@ function populateFields(rawValue) {
 
         // Restore Custom-plan inputs only when the saved plan is Custom
         if (data.paymentPlan === 'custom') {
-            ['totalAmount','downpaymentPct','downpaymentDate',
-             'possessionPct','possessionDate','paymentPlanUnits'].forEach(function(id) {
-                if (data[id] !== undefined && data[id] !== '') {
-                    document.getElementById(id).value = data[id];
-                }
+            var customMap = {
+                totalAmount: 'totalAmount', downpaymentPct: 'downpaymentPct', downpaymentDate: 'downpaymentDate',
+                duringConstructionPct: 'dcPct', duringConstructionFreq: 'dcFreq',
+                duringConstructionPayments: 'dcPayments', duringConstructionStartDate: 'dcStartDate',
+                possessionPct: 'possessionPct', possessionDate: 'possessionDate',
+                postHandoverPct: 'phPct', postHandoverFreq: 'phFreq',
+                postHandoverPayments: 'phPayments', postHandoverStartDate: 'phStartDate'
+            };
+            Object.keys(customMap).forEach(function(key) {
+                var el = document.getElementById(customMap[key]);
+                if (el && data[key] !== undefined && data[key] !== '') el.value = data[key];
             });
-
-            if (data.innerPaymentPlan) {
-                document.getElementById('innerPaymentPlan').value = data.innerPaymentPlan;
-            }
         }
 
         // Restore Schedule Dates (60/40, 3yr, 5yr)
