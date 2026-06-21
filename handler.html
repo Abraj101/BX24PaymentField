@@ -173,8 +173,8 @@
     <!-- ── Auto-calculated Amount note ── -->
     <div class="amount-status" id="amountStatus"></div>
 
-    <!-- ── Balloon Payments ── -->
-    <div class="balloon-section">
+    <!-- ── Balloon Payments (Custom plan only) ── -->
+    <div class="balloon-section" id="balloonSection" style="display:none;">
         <div class="balloon-header">
             <span class="balloon-title">Balloon Payments</span>
             <button class="btn-add-balloon" onclick="addBalloonRow()" type="button">+</button>
@@ -196,6 +196,18 @@
         </div>
     </div>
 
+    <!-- ── Private Pool toggle (always visible) ── -->
+    <div class="furnished-row">
+        <span class="furnished-label">Private Pool</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="furnished-state" id="privatePoolState">No</span>
+            <label class="switch">
+                <input type="checkbox" id="privatePoolToggle" onchange="onPrivatePoolChange()">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
     <!-- ── Schedule Dates Block (60/40, 3yr, 5yr) ── -->
     <div class="custom-fields-block" id="installmentBlock">
         <div class="divider"></div>
@@ -204,10 +216,6 @@
             <div class="field-group half">
                 <span class="field-label">Downpayment Start Date</span>
                 <input type="date" class="bx-input" id="downpaymentStartDate">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Installment Start Date</span>
-                <input type="date" class="bx-input" id="installmentStartDate">
             </div>
         </div>
     </div>
@@ -341,6 +349,17 @@ function planEnumValue(plan) {
     if (plan === 'custom')  return PLAN_ENUM.custom;
     return PLAN_ENUM.standard;
 }
+
+// Visible "Payment Plan" dropdown on the General tab — mirrors the exact plan chosen here
+const PLAN_LIST_FIELD_KEY = "UF_CRM_1782057587352";
+const PLAN_LIST_ENUM = {
+    '60_40':        '1331',
+    '3_years':      '1333',
+    '5_years':      '1335',
+    'full_payment': '1337',
+    'custom':       '1339'
+};
+function planListEnumValue(plan) { return PLAN_LIST_ENUM[plan] || ''; }   // '' = Not Selected
 
 let balloonCounter = 0;
 let currentDealId  = null;
@@ -607,11 +626,23 @@ function removeBalloonRow(idx) {
     handleDataChange();
 }
 
+// Reset balloon rows to the empty state (used when leaving the Custom plan)
+function clearBalloons() {
+    document.getElementById('balloonRows').innerHTML =
+        '<div class="balloon-empty" id="balloonEmpty">No balloon payments added</div>';
+    balloonCounter = 0;
+}
+
 // ── Furnished toggle ──────────────────────────────────────────────────────────
 
 function onFurnishedChange() {
     const on = document.getElementById('furnishedToggle').checked;
     document.getElementById('furnishedState').innerText = on ? 'Yes' : 'No';
+    // Autosave is handled by the global 'change' listener.
+}
+function onPrivatePoolChange() {
+    const on = document.getElementById('privatePoolToggle').checked;
+    document.getElementById('privatePoolState').innerText = on ? 'Yes' : 'No';
     // Autosave is handled by the global 'change' listener.
 }
 
@@ -623,7 +654,7 @@ const CUSTOM_FIELDS      = ['totalAmount', 'downpaymentPct', 'downpaymentDate',
                             'dcPct', 'dcFreq', 'dcPayments', 'dcStartDate',
                             'possessionPct', 'possessionDate',
                             'phPct', 'phFreq', 'phPayments', 'phStartDate'];
-const INSTALLMENT_FIELDS = ['downpaymentStartDate', 'installmentStartDate'];
+const INSTALLMENT_FIELDS = ['downpaymentStartDate'];
 const FULLPAYMENT_FIELDS = ['paymentDate'];
 
 function clearFields(ids) {
@@ -643,6 +674,10 @@ function onPlanChange() {
     document.getElementById('installmentBlock').classList.toggle('visible', isInstallment);
     document.getElementById('fullPaymentBlock').classList.toggle('visible', isFull);
 
+    // Balloon payments apply to Custom plans only
+    document.getElementById('balloonSection').style.display = isCustom ? '' : 'none';
+    if (!isCustom) clearBalloons();
+
     // Reset the inputs of any block that is now hidden, so storage stays clean
     if (!isCustom)      clearFields(CUSTOM_FIELDS);
     if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
@@ -659,18 +694,22 @@ function onPlanChange() {
 function collectData() {
     const plan = document.getElementById('paymentPlan').value;
 
+    // Balloon payments apply to Custom plans only
     const balloons = [];
-    document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
-        const pos = row.querySelector('[data-balloon="position"]').value.trim();
-        const amt = row.querySelector('[data-balloon="amount"]').value.trim();
-        if (pos || amt) balloons.push({ position: pos, amount: amt });
-    });
+    if (plan === 'custom') {
+        document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
+            const pos = row.querySelector('[data-balloon="position"]').value.trim();
+            const amt = row.querySelector('[data-balloon="amount"]').value.trim();
+            if (pos || amt) balloons.push({ position: pos, amount: amt });
+        });
+    }
 
     const data = {
         paymentPlan:     plan,
         discountPct:     document.getElementById('discountPct').value || '0',
         balloonPayments: balloons,
-        furnished:       document.getElementById('furnishedToggle').checked ? 'Yes' : 'No'
+        furnished:       document.getElementById('furnishedToggle').checked ? 'Yes' : 'No',
+        privatePool:     document.getElementById('privatePoolToggle').checked ? 'Yes' : 'No'
     };
 
     // Custom plan details are stored ONLY while Custom is the selected plan
@@ -695,10 +734,9 @@ function collectData() {
         data.postHandoverStartDate = document.getElementById('phStartDate').value || '';
     }
 
-    // Schedule dates stored only for 60/40, 3yr, 5yr
+    // Schedule date stored only for 60/40, 3yr, 5yr (used as the schedule anchor in Booking/SPA)
     if (INSTALLMENT_PLANS.indexOf(plan) !== -1) {
         data.downpaymentStartDate = document.getElementById('downpaymentStartDate').value || '';
-        data.installmentStartDate = document.getElementById('installmentStartDate').value || '';
     }
 
     // Payment date stored only for Full Payment
@@ -724,8 +762,9 @@ function handleDataChange() {
         document.getElementById('saveIndicator').innerText = "Saving...";
         const data = collectData();
         const payload = {};
-        payload[STORAGE_FIELD_KEY] = JSON.stringify(data);
-        payload[PLAN_FIELD_KEY]    = planEnumValue(data.paymentPlan);
+        payload[STORAGE_FIELD_KEY]    = JSON.stringify(data);
+        payload[PLAN_FIELD_KEY]       = planEnumValue(data.paymentPlan);
+        payload[PLAN_LIST_FIELD_KEY]  = planListEnumValue(data.paymentPlan);
 
         BX24.callMethod('crm.deal.update', {
             id:     currentDealId,
@@ -765,6 +804,11 @@ function populateFields(rawValue) {
         document.getElementById('furnishedToggle').checked = furnishedOn;
         document.getElementById('furnishedState').innerText = furnishedOn ? 'Yes' : 'No';
 
+        // Restore Private Pool toggle (defaults to No / off)
+        var poolOn = (data.privatePool === 'Yes' || data.privatePool === true);
+        document.getElementById('privatePoolToggle').checked = poolOn;
+        document.getElementById('privatePoolState').innerText = poolOn ? 'Yes' : 'No';
+
         if (Array.isArray(data.balloonPayments) && data.balloonPayments.length > 0) {
             document.getElementById('balloonRows').innerHTML = '';
             balloonCounter = 0;
@@ -789,14 +833,9 @@ function populateFields(rawValue) {
             });
         }
 
-        // Restore Schedule Dates (60/40, 3yr, 5yr)
-        if (INSTALLMENT_PLANS.indexOf(data.paymentPlan) !== -1) {
-            if (data.downpaymentStartDate) {
-                document.getElementById('downpaymentStartDate').value = data.downpaymentStartDate;
-            }
-            if (data.installmentStartDate) {
-                document.getElementById('installmentStartDate').value = data.installmentStartDate;
-            }
+        // Restore Schedule Date (60/40, 3yr, 5yr)
+        if (INSTALLMENT_PLANS.indexOf(data.paymentPlan) !== -1 && data.downpaymentStartDate) {
+            document.getElementById('downpaymentStartDate').value = data.downpaymentStartDate;
         }
 
         // Restore Payment Date (Full Payment)
