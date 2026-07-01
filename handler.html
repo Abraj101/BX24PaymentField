@@ -1,1294 +1,1993 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Details</title>
-    <script src="https://api.bitrix24.com/api/v1/"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            font-size: 13px; color: #333; background: #fff;
-            overflow-x: hidden;
-        }
-
-        /* ── Layout ── */
-        .bx-section { background: #fff; padding-bottom: 20px; }
-        .section-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 20px 12px; border-bottom: 2px solid #f0f3f7;
-            margin-bottom: 8px;
-        }
-        .section-title {
-            font-size: 14px; font-weight: 700; color: #2fc6f6;
-            text-transform: uppercase; letter-spacing: 0.04em;
-        }
-        .save-indicator {
-            font-size: 11px; color: #2fc6f6; font-weight: 600;
-            padding: 0; min-height: 16px;
-        }
-
-        /* ── Field rows ── */
-        .field-row {
-            display: flex; gap: 16px; padding: 10px 20px; align-items: flex-end;
-        }
-        .field-group { display: flex; flex-direction: column; flex: 1; gap: 5px; }
-        .field-group.half { flex: 0 0 calc(50% - 8px); }
-        .field-group.third { flex: 0 0 calc(33.33% - 11px); }
-        .field-label {
-            font-size: 11px; font-weight: 700; color: #8e99a4;
-            text-transform: uppercase; letter-spacing: 0.03em;
-        }
-
-        /* ── Inputs ── */
-        .bx-input, .bx-select {
-            width: 100%; height: 36px; padding: 0 12px;
-            border: 1px solid #d4dae3; border-radius: 6px;
-            color: #333; background: #fff; outline: none;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            appearance: none; -webkit-appearance: none;
-            font-size: 13px;
-        }
-        .bx-input:focus, .bx-select:focus {
-            border-color: #2fc6f6;
-            box-shadow: 0 0 0 3px rgba(47,198,246,0.12);
-        }
-        .select-wrapper { position: relative; }
-        .select-wrapper::after {
-            content: ""; position: absolute; right: 12px; top: 50%;
-            transform: translateY(-50%); width: 0; height: 0;
-            border-left: 4px solid transparent; border-right: 4px solid transparent;
-            border-top: 5px solid #8e99a4; pointer-events: none;
-        }
-
-        /* ── Section divider ── */
-        .divider { height: 1px; background: #f0f3f7; margin: 8px 0; }
-        .sub-header {
-            font-size: 11px; font-weight: 700; color: #2fc6f6;
-            text-transform: uppercase; letter-spacing: 0.04em;
-            padding: 12px 20px 4px;
-        }
-
-        /* ── Balloon payments ── */
-        .balloon-section { padding: 12px 20px 4px; }
-        .balloon-header {
-            display: flex; align-items: center;
-            justify-content: space-between; margin-bottom: 10px;
-        }
-        .balloon-title { font-size: 12px; font-weight: 700; color: #535c69; }
-        .btn-add-balloon {
-            width: 28px; height: 28px; border-radius: 50%;
-            border: 1.5px solid #2fc6f6; background: transparent;
-            color: #2fc6f6; font-size: 20px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; outline: none; transition: all 0.15s;
-        }
-        .btn-add-balloon:hover { background: #2fc6f6; color: #fff; }
-        .balloon-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 32px;
-            gap: 10px; align-items: center; margin-bottom: 8px;
-        }
-        .balloon-row .bx-input {
-            background: #f8fafc; border-color: #d4dae3;
-        }
-        .btn-remove-balloon {
-            background: transparent; border: none;
-            color: #d0d4db; font-size: 20px;
-            cursor: pointer; padding: 0; line-height: 1;
-            transition: color 0.15s;
-        }
-        .btn-remove-balloon:hover { color: #ff5c5c; }
-
-        /* ── Custom plan block ── */
-        .custom-fields-block { display: none; }
-        .custom-fields-block.visible { display: block; }
-
-        /* ── Empty balloon state ── */
-        .balloon-empty {
-            font-size: 12px; color: #b0b8c4;
-            text-align: center; padding: 8px 0 4px;
-            font-style: italic;
-        }
-
-        /* ── Auto-calculated amount note ── */
-        .amount-status {
-            font-size: 12px; color: #8e99a4; font-weight: 600;
-            padding: 2px 20px 6px; display: none;
-        }
-
-        /* ── Furnished toggle ── */
-        .furnished-row {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px 4px;
-        }
-        .furnished-label { font-size: 12px; font-weight: 700; color: #535c69; }
-        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .switch .slider {
-            position: absolute; cursor: pointer; inset: 0;
-            background: #cfd6df; border-radius: 24px; transition: background 0.15s;
-        }
-        .switch .slider:before {
-            content: ""; position: absolute; height: 18px; width: 18px;
-            left: 3px; bottom: 3px; background: #fff; border-radius: 50%;
-            transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-        }
-        .switch input:checked + .slider { background: #2fc6f6; }
-        .switch input:checked + .slider:before { transform: translateX(20px); }
-        .furnished-state { font-size: 12px; font-weight: 600; color: #8e99a4; min-width: 28px; text-align: right; }
-
-        /* ── Unit section ── */
-        .unit-section { padding: 12px 20px 4px; }
-        .unit-row { display: flex; gap: 12px; align-items: flex-end; }
-        .unit-picker { flex: 1; }
-        .unit-status-box { flex: 0 0 130px; display: flex; flex-direction: column; gap: 5px; }
-        .status-badge {
-            height: 36px; border-radius: 6px; display: flex;
-            align-items: center; justify-content: center;
-            font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
-            border: 1px solid transparent; text-transform: capitalize;
-        }
-        .status-badge.empty     { background: #f1f4f8; color: #9aa5b1; border-color: #e2e8f0; }
-        .status-badge.available { background: #e7f7ee; color: #1a9d54; border-color: #b6e6c9; }
-        .status-badge.reserved  { background: #eef2f7; color: #5b6b7c; border-color: #d6dee7; }
-        .status-badge.booked    { background: #fdeecf; color: #b7791f; border-color: #f2d9a8; }
-        .status-badge.sold      { background: #fdecea; color: #c62828; border-color: #f5c6c2; }
-        .unit-gate-msg {
-            font-size: 12px; font-weight: 600; padding: 8px 20px 2px;
-            display: none; line-height: 1.4;
-        }
-        .btn-attach {
-            display: none; margin: 10px 20px 0; height: 36px; padding: 0 18px;
-            border: none; border-radius: 6px; background: #2fc6f6; color: #fff;
-            font-weight: 700; font-size: 13px; cursor: pointer; transition: background 0.15s;
-        }
-        .btn-attach:hover { background: #1cb5e3; }
-        .btn-attach:disabled { background: #a0d8ef; cursor: not-allowed; }
-        #paymentBody { transition: opacity 0.15s; }
-        #paymentBody.locked { opacity: 0.45; pointer-events: none; }
-    </style>
-</head>
-<body>
-<div class="bx-section" id="mainContainer">
-
-    <div class="section-header">
-        <span class="section-title">Payment Details</span>
-        <span class="save-indicator" id="saveIndicator">Connecting...</span>
-    </div>
-
-    <!-- ── Unit Selection (top of section) ── -->
-    <div class="unit-section">
-        <div class="unit-row">
-            <div class="field-group unit-picker">
-                <span class="field-label">Unit</span>
-                <div class="select-wrapper">
-                    <select class="bx-select" id="unitSelect" onchange="onUnitChange()">
-                        <option value="">— Select unit —</option>
-                    </select>
-                </div>
-            </div>
-            <div class="unit-status-box">
-                <span class="field-label">Status</span>
-                <div class="status-badge empty" id="unitStatusBadge">—</div>
-            </div>
-        </div>
-    </div>
-    <button class="btn-attach" id="attachBtn" type="button" onclick="attachUnit()">Attach unit &amp; mark Booked</button>
-    <div class="unit-gate-msg" id="unitGateMsg"></div>
-    <div class="divider"></div>
-
-    <!-- ── Payment body (locked until a valid unit is chosen) ── -->
-    <div id="paymentBody">
-
-    <!-- ── Row 1: Plan + Discount ── -->
-    <div class="field-row">
-        <div class="field-group">
-            <span class="field-label">Payment Plan</span>
-            <div class="select-wrapper">
-                <select class="bx-select" id="paymentPlan" onchange="onPlanChange()">
-                    <option value="">— Select —</option>
-                    <option value="60_40">60/40</option>
-                    <option value="3_years">3 Years</option>
-                    <option value="5_years">5 Years</option>
-                    <option value="full_payment">Full Payment</option>
-                    <option value="custom">Custom</option>
-                </select>
-            </div>
-        </div>
-        <div class="field-group half">
-            <span class="field-label">Discount %</span>
-            <input type="number" class="bx-input" id="discountPct"
-                   placeholder="0" min="0" max="100" step="0.01">
-        </div>
-    </div>
-
-    <!-- ── Auto-calculated Amount note ── -->
-    <div class="amount-status" id="amountStatus"></div>
-
-    <!-- ── Balloon Payments (Custom plan only) ── -->
-    <div class="balloon-section" id="balloonSection" style="display:none;">
-        <div class="balloon-header">
-            <span class="balloon-title">Balloon Payments</span>
-            <button class="btn-add-balloon" onclick="addBalloonRow()" type="button">+</button>
-        </div>
-        <div id="balloonRows">
-            <div class="balloon-empty" id="balloonEmpty">No balloon payments added</div>
-        </div>
-    </div>
-
-    <!-- ── Furnished toggle (always visible) ── -->
-    <div class="furnished-row">
-        <span class="furnished-label">Furnished</span>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <span class="furnished-state" id="furnishedState">No</span>
-            <label class="switch">
-                <input type="checkbox" id="furnishedToggle" onchange="onFurnishedChange()">
-                <span class="slider"></span>
-            </label>
-        </div>
-    </div>
-
-    <!-- ── Private Pool toggle (always visible) ── -->
-    <div class="furnished-row">
-        <span class="furnished-label">Private Pool</span>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <span class="furnished-state" id="privatePoolState">No</span>
-            <label class="switch">
-                <input type="checkbox" id="privatePoolToggle" onchange="onPrivatePoolChange()">
-                <span class="slider"></span>
-            </label>
-        </div>
-    </div>
-
-    <!-- ── Schedule Dates Block (60/40, 3yr, 5yr) ── -->
-    <div class="custom-fields-block" id="installmentBlock">
-        <div class="divider"></div>
-        <div class="sub-header">Schedule Dates</div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">Downpayment Start Date</span>
-                <input type="date" class="bx-input" id="downpaymentStartDate">
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Full Payment Block ── -->
-    <div class="custom-fields-block" id="fullPaymentBlock">
-        <div class="divider"></div>
-        <div class="sub-header">Payment Date</div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">Payment Date</span>
-                <input type="date" class="bx-input" id="paymentDate">
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Custom Plan Block ── -->
-    <div class="custom-fields-block" id="customBlock">
-        <div class="divider"></div>
-        <div class="sub-header">Custom Plan Details</div>
-
-        <div class="field-row">
-            <div class="field-group">
-                <span class="field-label">Total Amount (AED)</span>
-                <input type="number" class="bx-input" id="totalAmount" placeholder="0">
-            </div>
-        </div>
-
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">Downpayment %</span>
-                <input type="number" class="bx-input" id="downpaymentPct" placeholder="0">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Downpayment Date</span>
-                <input type="date" class="bx-input" id="downpaymentDate">
-            </div>
-        </div>
-
-        <!-- During Construction -->
-        <div class="divider"></div>
-        <div class="sub-header">During Construction</div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">During Construction %</span>
-                <input type="number" class="bx-input" id="dcPct" placeholder="0">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Frequency</span>
-                <div class="select-wrapper">
-                    <select class="bx-select" id="dcFreq">
-                        <option value="">— Select —</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="quarterly">Quarterly</option>
-                        <option value="biannually">Biannually</option>
-                        <option value="annually">Annually</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">No of Payments</span>
-                <input type="number" class="bx-input" id="dcPayments" placeholder="0" min="1">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Installment Start Date</span>
-                <input type="date" class="bx-input" id="dcStartDate">
-            </div>
-        </div>
-
-        <!-- On Possession -->
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">On Possession %</span>
-                <input type="number" class="bx-input" id="possessionPct" placeholder="0">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">On Possession Date</span>
-                <input type="date" class="bx-input" id="possessionDate">
-            </div>
-        </div>
-
-        <!-- Post Handover -->
-        <div class="divider"></div>
-        <div class="sub-header">Post Handover</div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">Post Handover %</span>
-                <input type="number" class="bx-input" id="phPct" placeholder="0">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Frequency</span>
-                <div class="select-wrapper">
-                    <select class="bx-select" id="phFreq">
-                        <option value="">— Select —</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="quarterly">Quarterly</option>
-                        <option value="biannually">Biannually</option>
-                        <option value="annually">Annually</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-        <div class="field-row">
-            <div class="field-group half">
-                <span class="field-label">No of Payments</span>
-                <input type="number" class="bx-input" id="phPayments" placeholder="0" min="1">
-            </div>
-            <div class="field-group half">
-                <span class="field-label">Installment Start Date</span>
-                <input type="date" class="bx-input" id="phStartDate">
-            </div>
-        </div>
-    </div>
-
-    </div><!-- /paymentBody -->
-
-</div>
-
-<script>
-// ── IMPORTANT: verify this key via crm.deal.fields in the REST explorer ──
-const STORAGE_FIELD_KEY = "UF_CRM_1781355927497";
-const PLAN_FIELD_KEY    = "UF_CRM_1781639983191";   // hidden dropdown: Not Selected / Standard / Custom
-// Enum option values for the plan dropdown (from the field definition)
-const PLAN_ENUM = {
-    standard:    '1285',   // 60/40, 3 Years, 5 Years, Full Payment
-    custom:      '1287',   // Custom
-    notSelected: ''        // empty default = "not selected"
-};
-function planEnumValue(plan) {
-    if (!plan)              return PLAN_ENUM.notSelected;
-    if (plan === 'custom')  return PLAN_ENUM.custom;
-    return PLAN_ENUM.standard;
-}
-
-// Visible "Payment Plan" dropdown on the General tab — mirrors the exact plan chosen here
-const PLAN_LIST_FIELD_KEY = "UF_CRM_1782057587352";
-const PLAN_LIST_ENUM = {
-    '60_40':        '1331',
-    '3_years':      '1333',
-    '5_years':      '1335',
-    'full_payment': '1337',
-    'custom':       '1339'
-};
-function planListEnumValue(plan) { return PLAN_LIST_ENUM[plan] || ''; }   // '' = Not Selected
-
-let balloonCounter = 0;
-let currentDealId  = null;
-let saveTimeout    = null;
-
-// ── Amount Auto-Calculation (catalog plan prices → Deal amount) ───────────────
-const MAX_DISCOUNT = 15;   // hard cap for 60/40, 3yr, 5yr, full payment
-
-// Keywords that identify each product price field by its (lower-cased) label
-const PLAN_PRICE_KEYWORDS = {
-    '60_40':        ['60/40'],
-    '3_years':      ['3 yr', '3 years', '3yr'],
-    '5_years':      ['5 yr', '5 years', '5yr'],
-    'full_payment': ['upfront', '100%', 'full payment']
-};
-const PLAN_LABELS = {
-    '60_40': '60/40', '3_years': '3 Years',
-    '5_years': '5 Years', 'full_payment': 'Full Payment', 'custom': 'Custom'
-};
-
-// Confirmed price property IDs on the Dubai Inventory catalog (catalog-wide,
-// same on every unit). Values are money fields stored as "640000.00|AED".
-const PLAN_PROPERTY_OVERRIDE = {
-    '60_40':        263,   // Price: 60/40
-    '3_years':      265,   // Price: 50/10/40 (3 Yrs Post Handover)
-    '5_years':      267,   // Price: 50/10/40 (5 Yrs Post Handover)
-    'full_payment': 269    // Price: 100% Upfront Unfurnished
-};
-
-const _productCache = {};   // productId -> product object
-const _propMapCache = {};   // iblockId  -> [{id, name}]
-let   amountTimeout = null;
-
-function setAmountStatus(msg, isError) {
-    const el = document.getElementById('amountStatus');
-    if (!el) return;
-    el.textContent  = msg || '';
-    el.style.color  = isError ? '#c62828' : '#8e99a4';
-    el.style.display = msg ? 'block' : 'none';
-    notifyResize();
-}
-
-// Promise wrapper around BX24.callMethod
-function callBX(method, params) {
-    return new Promise(function(resolve, reject) {
-        BX24.callMethod(method, params, function(res) {
-            if (res.error()) reject(res.error());
-            else resolve(res.data());
-        });
-    });
-}
-
-// Pull a single property value off a catalog.product.get product object
-function extractPropValue(product, propId) {
-    const keys = ['property' + propId, 'property_' + propId,
-                  'PROPERTY_' + propId, String(propId)];
-    for (let i = 0; i < keys.length; i++) {
-        let v = product[keys[i]];
-        if (v === undefined || v === null) continue;
-        if (Array.isArray(v)) v = v[0];
-        if (v && typeof v === 'object') v = (v.value !== undefined ? v.value : v.VALUE);
-        const num = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
-        return isNaN(num) ? null : num;
-    }
-    return null;
-}
-
-// Return the first array found in a response object (key-agnostic)
-function firstArray(obj) {
-    if (Array.isArray(obj)) return obj;
-    if (obj && typeof obj === 'object') {
-        for (const k in obj) if (Array.isArray(obj[k])) return obj[k];
-    }
-    return [];
-}
-
-// List every product field across all catalogs (paginated, cached, no iblock filter)
-async function fetchAllProductProperties() {
-    if (_propMapCache.all) return _propMapCache.all;
-    let all = [], start = 0, guard = 0;
-    while (guard++ < 6) {
-        const pdata = await callBX('catalog.productProperty.list',
-            { select: ['id', 'name', 'iblockId'], start: start });
-        const batch = firstArray(pdata);
-        all = all.concat(batch);
-        if (batch.length < 50) break;   // last page
-        start += 50;
-    }
-    _propMapCache.all = all;
-    console.log('[PaymentWidget] product fields found:', all.length,
-        all.map(function(p) { return (p.id || p.ID) + ' = ' + (p.name || p.NAME); }));
-    return all;
-}
-
-// Resolve the plan price for one product (with per-session caching)
-async function getProductPlanPrice(productId, plan) {
-    let product = _productCache[productId];
-    if (!product) {
-        const data = await callBX('catalog.product.get', { id: productId });
-        product = (data && data.product) ? data.product : data;
-        _productCache[productId] = product;
-        const pk = Object.keys(product).filter(function(k) { return /^property/i.test(k); });
-        console.log('[PaymentWidget] product', productId, product);
-        console.log('[PaymentWidget] product property values:',
-            pk.map(function(k) { return k + ' = ' + JSON.stringify(product[k]); }));
-    }
-
-    // 1) Manual override wins (if configured)
-    if (PLAN_PROPERTY_OVERRIDE[plan]) {
-        return extractPropValue(product, PLAN_PROPERTY_OVERRIDE[plan]);
-    }
-
-    // 2) Auto-detect by field label
-    const props = await fetchAllProductProperties();
-    const keywords = PLAN_PRICE_KEYWORDS[plan] || [];
-    let matches = props.filter(function(p) {
-        const n = (p.name || p.NAME || '').toLowerCase();
-        return keywords.some(function(k) { return n.indexOf(k) !== -1; });
-    });
-    if (matches.length > 1) {   // prefer fields that look like a price field
-        const priced = matches.filter(function(p) {
-            return (p.name || p.NAME || '').toLowerCase().indexOf('price') !== -1;
-        });
-        if (priced.length) matches = priced;
-    }
-    if (!matches.length) {
-        console.warn('[PaymentWidget] no field matched plan "' + plan +
-            '". Check the field list logged above, then paste the right id into ' +
-            'PLAN_PROPERTY_OVERRIDE.');
-        return null;
-    }
-    return extractPropValue(product, matches[0].id || matches[0].ID);
-}
-
-// Read deal products, sum plan prices, apply capped discount, write the amount
-async function recalcDealAmount() {
-    const plan = document.getElementById('paymentPlan').value;
-    if (!currentDealId || !plan) return;
-
-    let disc = parseFloat(document.getElementById('discountPct').value) || 0;
-    if (disc < 0) disc = 0;
-
-    // ── Custom plan: price from the manually entered Total Amount ──
-    if (plan === 'custom') {
-        const raw   = document.getElementById('totalAmount').value;
-        const total = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
-        if (isNaN(total) || total <= 0) {
-            setAmountStatus('Enter a Total Amount to set the deal amount.');
-            return;
-        }
-        if (disc > 100) disc = 100;   // no 15% cap on Custom — only sane bounds
-        const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
-        try {
-            await callBX('crm.deal.update', {
-                id: currentDealId,
-                fields: { OPPORTUNITY: finalAmount, IS_MANUAL_OPPORTUNITY: 'Y' }
-            });
-            setAmountStatus('Amount set: ' + finalAmount.toLocaleString() +
-                (disc ? ('  (−' + disc + '%)') : ''));
-        } catch (e) {
-            console.error('[PaymentWidget] custom recalc error:', e);
-            setAmountStatus('Could not set amount (see console).', true);
-        }
-        return;
-    }
-
-    // ── Catalog-priced plans (60/40, 3yr, 5yr, full payment) ──
-    if (disc > MAX_DISCOUNT) disc = MAX_DISCOUNT;
-    setAmountStatus('Calculating amount…');
-    try {
-        const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
-        const rows = Array.isArray(rowsData) ? rowsData : (rowsData.result || []);
-        if (!rows.length) {
-            setAmountStatus('No products on this deal — add the unit in the Products tab.', true);
-            return;
-        }
-
-        let total = 0;
-        const missing = [];
-        for (let i = 0; i < rows.length; i++) {
-            const pid = rows[i].PRODUCT_ID || rows[i].productId;
-            const qty = parseFloat(rows[i].QUANTITY || rows[i].quantity || 1) || 1;
-            if (!pid) continue;
-            const price = await getProductPlanPrice(pid, plan);
-            if (price === null) {
-                missing.push(rows[i].PRODUCT_NAME || rows[i].productName || ('#' + pid));
-                continue;
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Payment Details</title>
+        <script src="https://api.bitrix24.com/api/v1/"></script>
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
             }
-            total += price * qty;
-        }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    Arial, sans-serif;
+                font-size: 13px;
+                color: #333;
+                background: #fff;
+                overflow-x: hidden;
+            }
 
-        if (missing.length) {
-            setAmountStatus('No "' + (PLAN_LABELS[plan] || plan) +
-                '" price found for: ' + missing.join(', '), true);
-            return;
-        }
+            /* ── Layout ── */
+            .bx-section {
+                background: #fff;
+                padding-bottom: 20px;
+            }
+            .section-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 16px 20px 12px;
+                border-bottom: 2px solid #f0f3f7;
+                margin-bottom: 8px;
+            }
+            .section-title {
+                font-size: 14px;
+                font-weight: 700;
+                color: #2fc6f6;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .save-indicator {
+                font-size: 11px;
+                color: #2fc6f6;
+                font-weight: 600;
+                padding: 0;
+                min-height: 16px;
+            }
 
-        const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
+            /* ── Field rows ── */
+            .field-row {
+                display: flex;
+                gap: 16px;
+                padding: 10px 20px;
+                align-items: flex-end;
+            }
+            .field-group {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                gap: 5px;
+            }
+            .field-group.half {
+                flex: 0 0 calc(50% - 8px);
+            }
+            .field-group.third {
+                flex: 0 0 calc(33.33% - 11px);
+            }
+            .field-label {
+                font-size: 11px;
+                font-weight: 700;
+                color: #8e99a4;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
 
-        await callBX('crm.deal.update', {
-            id: currentDealId,
-            fields: { OPPORTUNITY: finalAmount, IS_MANUAL_OPPORTUNITY: 'Y' }
-        });
+            /* ── Inputs ── */
+            .bx-input,
+            .bx-select {
+                width: 100%;
+                height: 36px;
+                padding: 0 12px;
+                border: 1px solid #d4dae3;
+                border-radius: 6px;
+                color: #333;
+                background: #fff;
+                outline: none;
+                transition:
+                    border-color 0.15s,
+                    box-shadow 0.15s;
+                appearance: none;
+                -webkit-appearance: none;
+                font-size: 13px;
+            }
+            .bx-input:focus,
+            .bx-select:focus {
+                border-color: #2fc6f6;
+                box-shadow: 0 0 0 3px rgba(47, 198, 246, 0.12);
+            }
+            .select-wrapper {
+                position: relative;
+            }
+            .select-wrapper::after {
+                content: "";
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #8e99a4;
+                pointer-events: none;
+            }
 
-        setAmountStatus('Amount set: ' + finalAmount.toLocaleString() +
-            (disc ? ('  (−' + disc + '%)') : ''));
-    } catch (e) {
-        console.error('[PaymentWidget] recalcDealAmount error:', e);
-        setAmountStatus('Could not calculate amount (see console).', true);
-    }
-}
+            /* ── Section divider ── */
+            .divider {
+                height: 1px;
+                background: #f0f3f7;
+                margin: 8px 0;
+            }
+            .sub-header {
+                font-size: 11px;
+                font-weight: 700;
+                color: #2fc6f6;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                padding: 12px 20px 4px;
+            }
 
-function scheduleRecalc() {
-    clearTimeout(amountTimeout);
-    amountTimeout = setTimeout(recalcDealAmount, 700);
-}
+            /* ── Balloon payments ── */
+            .balloon-section {
+                padding: 12px 20px 4px;
+            }
+            .balloon-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+            .balloon-title {
+                font-size: 12px;
+                font-weight: 700;
+                color: #535c69;
+            }
+            .btn-add-balloon {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                border: 1.5px solid #2fc6f6;
+                background: transparent;
+                color: #2fc6f6;
+                font-size: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                outline: none;
+                transition: all 0.15s;
+            }
+            .btn-add-balloon:hover {
+                background: #2fc6f6;
+                color: #fff;
+            }
+            .balloon-row {
+                display: grid;
+                grid-template-columns: 1fr 1fr 32px;
+                gap: 10px;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .balloon-row .bx-input {
+                background: #f8fafc;
+                border-color: #d4dae3;
+            }
+            .btn-remove-balloon {
+                background: transparent;
+                border: none;
+                color: #d0d4db;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 0;
+                line-height: 1;
+                transition: color 0.15s;
+            }
+            .btn-remove-balloon:hover {
+                color: #ff5c5c;
+            }
 
-// Clamp the discount field for non-custom plans
-function enforceDiscountCap() {
-    const plan = document.getElementById('paymentPlan').value;
-    const d = document.getElementById('discountPct');
-    if (plan && plan !== 'custom' && parseFloat(d.value) > MAX_DISCOUNT) {
-        d.value = MAX_DISCOUNT;
-        setAmountStatus('Max discount for this plan is ' + MAX_DISCOUNT + '%.', true);
-    }
-}
+            /* ── Custom plan block ── */
+            .custom-fields-block {
+                display: none;
+            }
+            .custom-fields-block.visible {
+                display: block;
+            }
 
-// ── Balloon Rows ─────────────────────────────────────────────────────────────
+            /* ── Empty balloon state ── */
+            .balloon-empty {
+                font-size: 12px;
+                color: #b0b8c4;
+                text-align: center;
+                padding: 8px 0 4px;
+                font-style: italic;
+            }
 
-function addBalloonRow(position, amount) {
-    balloonCounter++;
-    const idx = balloonCounter;
+            /* ── Auto-calculated amount note ── */
+            .amount-status {
+                font-size: 12px;
+                color: #8e99a4;
+                font-weight: 600;
+                padding: 2px 20px 6px;
+                display: none;
+            }
 
-    // Hide empty state
-    const empty = document.getElementById('balloonEmpty');
-    if (empty) empty.style.display = 'none';
+            /* ── Furnished toggle ── */
+            .furnished-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 10px 20px 4px;
+            }
+            .furnished-label {
+                font-size: 12px;
+                font-weight: 700;
+                color: #535c69;
+            }
+            .switch {
+                position: relative;
+                display: inline-block;
+                width: 44px;
+                height: 24px;
+            }
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            .switch .slider {
+                position: absolute;
+                cursor: pointer;
+                inset: 0;
+                background: #cfd6df;
+                border-radius: 24px;
+                transition: background 0.15s;
+            }
+            .switch .slider:before {
+                content: "";
+                position: absolute;
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 3px;
+                background: #fff;
+                border-radius: 50%;
+                transition: transform 0.15s;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            }
+            .switch input:checked + .slider {
+                background: #2fc6f6;
+            }
+            .switch input:checked + .slider:before {
+                transform: translateX(20px);
+            }
+            .furnished-state {
+                font-size: 12px;
+                font-weight: 600;
+                color: #8e99a4;
+                min-width: 28px;
+                text-align: right;
+            }
 
-    const row = document.createElement('div');
-    row.className = 'balloon-row';
-    row.id = `balloonRow_${idx}`;
-    row.innerHTML = `
+            /* ── Unit section ── */
+            .unit-section {
+                padding: 12px 20px 4px;
+            }
+            .unit-row {
+                display: flex;
+                gap: 12px;
+                align-items: flex-end;
+            }
+            .unit-picker {
+                flex: 1;
+            }
+            .unit-status-box {
+                flex: 0 0 130px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .status-badge {
+                height: 36px;
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                border: 1px solid transparent;
+                text-transform: capitalize;
+            }
+            .status-badge.empty {
+                background: #f1f4f8;
+                color: #9aa5b1;
+                border-color: #e2e8f0;
+            }
+            .status-badge.available {
+                background: #e7f7ee;
+                color: #1a9d54;
+                border-color: #b6e6c9;
+            }
+            .status-badge.reserved {
+                background: #eef2f7;
+                color: #5b6b7c;
+                border-color: #d6dee7;
+            }
+            .status-badge.booked {
+                background: #fdeecf;
+                color: #b7791f;
+                border-color: #f2d9a8;
+            }
+            .status-badge.sold {
+                background: #fdecea;
+                color: #c62828;
+                border-color: #f5c6c2;
+            }
+            .unit-gate-msg {
+                font-size: 12px;
+                font-weight: 600;
+                padding: 8px 20px 2px;
+                display: none;
+                line-height: 1.4;
+            }
+            .btn-attach {
+                display: none;
+                margin: 10px 20px 0;
+                height: 36px;
+                padding: 0 18px;
+                border: none;
+                border-radius: 6px;
+                background: #2fc6f6;
+                color: #fff;
+                font-weight: 700;
+                font-size: 13px;
+                cursor: pointer;
+                transition: background 0.15s;
+            }
+            .btn-attach:hover {
+                background: #1cb5e3;
+            }
+            .btn-attach:disabled {
+                background: #a0d8ef;
+                cursor: not-allowed;
+            }
+            #paymentBody {
+                transition: opacity 0.15s;
+            }
+            #paymentBody.locked {
+                opacity: 0.45;
+                pointer-events: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="bx-section" id="mainContainer">
+            <div class="section-header">
+                <span class="section-title">Payment Details</span>
+                <span class="save-indicator" id="saveIndicator"
+                    >Connecting...</span
+                >
+            </div>
+
+            <!-- ── Unit Selection (top of section) ── -->
+            <div class="unit-section">
+                <div class="unit-row">
+                    <div class="field-group unit-picker">
+                        <span class="field-label">Unit</span>
+                        <div class="select-wrapper">
+                            <select
+                                class="bx-select"
+                                id="unitSelect"
+                                onchange="onUnitChange()"
+                            >
+                                <option value="">— Select unit —</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="unit-status-box">
+                        <span class="field-label">Status</span>
+                        <div class="status-badge empty" id="unitStatusBadge">
+                            —
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button
+                class="btn-attach"
+                id="attachBtn"
+                type="button"
+                onclick="attachUnit()"
+            >
+                Attach unit &amp; mark Booked
+            </button>
+            <div class="unit-gate-msg" id="unitGateMsg"></div>
+            <div class="divider"></div>
+
+            <!-- ── Payment body (locked until a valid unit is chosen) ── -->
+            <div id="paymentBody">
+                <!-- ── Row 1: Plan + Discount ── -->
+                <div class="field-row">
+                    <div class="field-group">
+                        <span class="field-label">Payment Plan</span>
+                        <div class="select-wrapper">
+                            <select
+                                class="bx-select"
+                                id="paymentPlan"
+                                onchange="onPlanChange()"
+                            >
+                                <option value="">— Select —</option>
+                                <option value="60_40">60/40</option>
+                                <option value="3_years">3 Years</option>
+                                <option value="5_years">5 Years</option>
+                                <option value="full_payment">
+                                    Full Payment
+                                </option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field-group half">
+                        <span class="field-label">Discount %</span>
+                        <input
+                            type="number"
+                            class="bx-input"
+                            id="discountPct"
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                        />
+                    </div>
+                </div>
+
+                <!-- ── Auto-calculated Amount note ── -->
+                <div class="amount-status" id="amountStatus"></div>
+
+                <!-- ── Balloon Payments (Custom plan only) ── -->
+                <div
+                    class="balloon-section"
+                    id="balloonSection"
+                    style="display: none"
+                >
+                    <div class="balloon-header">
+                        <span class="balloon-title">Balloon Payments</span>
+                        <button
+                            class="btn-add-balloon"
+                            onclick="addBalloonRow()"
+                            type="button"
+                        >
+                            +
+                        </button>
+                    </div>
+                    <div id="balloonRows">
+                        <div class="balloon-empty" id="balloonEmpty">
+                            No balloon payments added
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Furnished toggle (always visible) ── -->
+                <div class="furnished-row">
+                    <span class="furnished-label">Furnished</span>
+                    <div style="display: flex; align-items: center; gap: 10px">
+                        <span class="furnished-state" id="furnishedState"
+                            >No</span
+                        >
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="furnishedToggle"
+                                onchange="onFurnishedChange()"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ── Private Pool toggle (always visible) ── -->
+                <div class="furnished-row">
+                    <span class="furnished-label">Private Pool</span>
+                    <div style="display: flex; align-items: center; gap: 10px">
+                        <span class="furnished-state" id="privatePoolState"
+                            >No</span
+                        >
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="privatePoolToggle"
+                                onchange="onPrivatePoolChange()"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ── Schedule Dates Block (60/40, 3yr, 5yr) ── -->
+                <div class="custom-fields-block" id="installmentBlock">
+                    <div class="divider"></div>
+                    <div class="sub-header">Schedule Dates</div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label"
+                                >Downpayment Start Date</span
+                            >
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="downpaymentStartDate"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Full Payment Block ── -->
+                <div class="custom-fields-block" id="fullPaymentBlock">
+                    <div class="divider"></div>
+                    <div class="sub-header">Payment Date</div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">Payment Date</span>
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="paymentDate"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Custom Plan Block ── -->
+                <div class="custom-fields-block" id="customBlock">
+                    <div class="divider"></div>
+                    <div class="sub-header">Custom Plan Details</div>
+
+                    <div class="field-row">
+                        <div class="field-group">
+                            <span class="field-label">Total Amount (AED)</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="totalAmount"
+                                placeholder="0"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">Downpayment %</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="downpaymentPct"
+                                placeholder="0"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label">Downpayment Date</span>
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="downpaymentDate"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- During Construction -->
+                    <div class="divider"></div>
+                    <div class="sub-header">During Construction</div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label"
+                                >During Construction %</span
+                            >
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="dcPct"
+                                placeholder="0"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label">Frequency</span>
+                            <div class="select-wrapper">
+                                <select class="bx-select" id="dcFreq">
+                                    <option value="">— Select —</option>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="biannually">
+                                        Biannually
+                                    </option>
+                                    <option value="annually">Annually</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">No of Payments</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="dcPayments"
+                                placeholder="0"
+                                min="1"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label"
+                                >Installment Start Date</span
+                            >
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="dcStartDate"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- On Possession -->
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">On Possession %</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="possessionPct"
+                                placeholder="0"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label">On Possession Date</span>
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="possessionDate"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Post Handover -->
+                    <div class="divider"></div>
+                    <div class="sub-header">Post Handover</div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">Post Handover %</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="phPct"
+                                placeholder="0"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label">Frequency</span>
+                            <div class="select-wrapper">
+                                <select class="bx-select" id="phFreq">
+                                    <option value="">— Select —</option>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="biannually">
+                                        Biannually
+                                    </option>
+                                    <option value="annually">Annually</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-group half">
+                            <span class="field-label">No of Payments</span>
+                            <input
+                                type="number"
+                                class="bx-input"
+                                id="phPayments"
+                                placeholder="0"
+                                min="1"
+                            />
+                        </div>
+                        <div class="field-group half">
+                            <span class="field-label"
+                                >Installment Start Date</span
+                            >
+                            <input
+                                type="date"
+                                class="bx-input"
+                                id="phStartDate"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- /paymentBody -->
+        </div>
+
+        <script>
+            // ── IMPORTANT: verify this key via crm.deal.fields in the REST explorer ──
+            const STORAGE_FIELD_KEY = "UF_CRM_1781355927497";
+            const PLAN_FIELD_KEY = "UF_CRM_1781639983191"; // hidden dropdown: Not Selected / Standard / Custom
+            // Enum option values for the plan dropdown (from the field definition)
+            const PLAN_ENUM = {
+                standard: "1285", // 60/40, 3 Years, 5 Years, Full Payment
+                custom: "1287", // Custom
+                notSelected: "", // empty default = "not selected"
+            };
+            function planEnumValue(plan) {
+                if (!plan) return PLAN_ENUM.notSelected;
+                if (plan === "custom") return PLAN_ENUM.custom;
+                return PLAN_ENUM.standard;
+            }
+
+            // Visible "Payment Plan" dropdown on the General tab — mirrors the exact plan chosen here
+            const PLAN_LIST_FIELD_KEY = "UF_CRM_1782057587352";
+            const PLAN_LIST_ENUM = {
+                "60_40": "1331",
+                "3_years": "1333",
+                "5_years": "1335",
+                full_payment: "1337",
+                custom: "1339",
+            };
+            function planListEnumValue(plan) {
+                return PLAN_LIST_ENUM[plan] || "";
+            } // '' = Not Selected
+
+            let balloonCounter = 0;
+            let currentDealId = null;
+            let saveTimeout = null;
+
+            // ── Amount Auto-Calculation (catalog plan prices → Deal amount) ───────────────
+            const MAX_DISCOUNT = 15; // hard cap for 60/40, 3yr, 5yr, full payment
+
+            // Keywords that identify each product price field by its (lower-cased) label
+            const PLAN_PRICE_KEYWORDS = {
+                "60_40": ["60/40"],
+                "3_years": ["3 yr", "3 years", "3yr"],
+                "5_years": ["5 yr", "5 years", "5yr"],
+                full_payment: ["upfront", "100%", "full payment"],
+            };
+            const PLAN_LABELS = {
+                "60_40": "60/40",
+                "3_years": "3 Years",
+                "5_years": "5 Years",
+                full_payment: "Full Payment",
+                custom: "Custom",
+            };
+
+            // Confirmed price property IDs on the Dubai Inventory catalog (catalog-wide,
+            // same on every unit). Values are money fields stored as "640000.00|AED".
+            const PLAN_PROPERTY_OVERRIDE = {
+                "60_40": 263, // Price: 60/40
+                "3_years": 265, // Price: 50/10/40 (3 Yrs Post Handover)
+                "5_years": 267, // Price: 50/10/40 (5 Yrs Post Handover)
+                full_payment: 269, // Price: 100% Upfront Unfurnished
+            };
+
+            const _productCache = {}; // productId -> product object
+            const _propMapCache = {}; // iblockId  -> [{id, name}]
+            let amountTimeout = null;
+
+            function setAmountStatus(msg, isError) {
+                const el = document.getElementById("amountStatus");
+                if (!el) return;
+                el.textContent = msg || "";
+                el.style.color = isError ? "#c62828" : "#8e99a4";
+                el.style.display = msg ? "block" : "none";
+                notifyResize();
+            }
+
+            // Promise wrapper around BX24.callMethod
+            function callBX(method, params) {
+                return new Promise(function (resolve, reject) {
+                    BX24.callMethod(method, params, function (res) {
+                        if (res.error()) reject(res.error());
+                        else resolve(res.data());
+                    });
+                });
+            }
+
+            // Pull a single property value off a catalog.product.get product object
+            function extractPropValue(product, propId) {
+                const keys = [
+                    "property" + propId,
+                    "property_" + propId,
+                    "PROPERTY_" + propId,
+                    String(propId),
+                ];
+                for (let i = 0; i < keys.length; i++) {
+                    let v = product[keys[i]];
+                    if (v === undefined || v === null) continue;
+                    if (Array.isArray(v)) v = v[0];
+                    if (v && typeof v === "object")
+                        v = v.value !== undefined ? v.value : v.VALUE;
+                    const num = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
+                    return isNaN(num) ? null : num;
+                }
+                return null;
+            }
+
+            // Return the first array found in a response object (key-agnostic)
+            function firstArray(obj) {
+                if (Array.isArray(obj)) return obj;
+                if (obj && typeof obj === "object") {
+                    for (const k in obj)
+                        if (Array.isArray(obj[k])) return obj[k];
+                }
+                return [];
+            }
+
+            // List every product field across all catalogs (paginated, cached, no iblock filter)
+            async function fetchAllProductProperties() {
+                if (_propMapCache.all) return _propMapCache.all;
+                let all = [],
+                    start = 0,
+                    guard = 0;
+                while (guard++ < 6) {
+                    const pdata = await callBX("catalog.productProperty.list", {
+                        select: ["id", "name", "iblockId"],
+                        start: start,
+                    });
+                    const batch = firstArray(pdata);
+                    all = all.concat(batch);
+                    if (batch.length < 50) break; // last page
+                    start += 50;
+                }
+                _propMapCache.all = all;
+                console.log(
+                    "[PaymentWidget] product fields found:",
+                    all.length,
+                    all.map(function (p) {
+                        return (p.id || p.ID) + " = " + (p.name || p.NAME);
+                    }),
+                );
+                return all;
+            }
+
+            // Resolve the plan price for one product (with per-session caching)
+            async function getProductPlanPrice(productId, plan) {
+                let product = _productCache[productId];
+                if (!product) {
+                    const data = await callBX("catalog.product.get", {
+                        id: productId,
+                    });
+                    product = data && data.product ? data.product : data;
+                    _productCache[productId] = product;
+                    const pk = Object.keys(product).filter(function (k) {
+                        return /^property/i.test(k);
+                    });
+                    console.log("[PaymentWidget] product", productId, product);
+                    console.log(
+                        "[PaymentWidget] product property values:",
+                        pk.map(function (k) {
+                            return k + " = " + JSON.stringify(product[k]);
+                        }),
+                    );
+                }
+
+                // 1) Manual override wins (if configured)
+                if (PLAN_PROPERTY_OVERRIDE[plan]) {
+                    return extractPropValue(
+                        product,
+                        PLAN_PROPERTY_OVERRIDE[plan],
+                    );
+                }
+
+                // 2) Auto-detect by field label
+                const props = await fetchAllProductProperties();
+                const keywords = PLAN_PRICE_KEYWORDS[plan] || [];
+                let matches = props.filter(function (p) {
+                    const n = (p.name || p.NAME || "").toLowerCase();
+                    return keywords.some(function (k) {
+                        return n.indexOf(k) !== -1;
+                    });
+                });
+                if (matches.length > 1) {
+                    // prefer fields that look like a price field
+                    const priced = matches.filter(function (p) {
+                        return (
+                            (p.name || p.NAME || "")
+                                .toLowerCase()
+                                .indexOf("price") !== -1
+                        );
+                    });
+                    if (priced.length) matches = priced;
+                }
+                if (!matches.length) {
+                    console.warn(
+                        '[PaymentWidget] no field matched plan "' +
+                            plan +
+                            '". Check the field list logged above, then paste the right id into ' +
+                            "PLAN_PROPERTY_OVERRIDE.",
+                    );
+                    return null;
+                }
+                return extractPropValue(
+                    product,
+                    matches[0].id || matches[0].ID,
+                );
+            }
+
+            // Read deal products, sum plan prices, apply capped discount, write the amount
+            async function recalcDealAmount() {
+                const plan = document.getElementById("paymentPlan").value;
+                if (!currentDealId || !plan) return;
+
+                let disc =
+                    parseFloat(document.getElementById("discountPct").value) ||
+                    0;
+                if (disc < 0) disc = 0;
+
+                // ── Custom plan: price from the manually entered Total Amount ──
+                if (plan === "custom") {
+                    const raw = document.getElementById("totalAmount").value;
+                    const total = parseFloat(
+                        String(raw).replace(/[^0-9.\-]/g, ""),
+                    );
+                    if (isNaN(total) || total <= 0) {
+                        setAmountStatus(
+                            "Enter a Total Amount to set the deal amount.",
+                        );
+                        return;
+                    }
+                    if (disc > 100) disc = 100; // no 15% cap on Custom — only sane bounds
+                    const finalAmount =
+                        Math.round(total * (1 - disc / 100) * 100) / 100;
+                    try {
+                        await callBX("crm.deal.update", {
+                            id: currentDealId,
+                            fields: {
+                                OPPORTUNITY: finalAmount,
+                                IS_MANUAL_OPPORTUNITY: "Y",
+                            },
+                        });
+                        setAmountStatus(
+                            "Amount set: " +
+                                finalAmount.toLocaleString() +
+                                (disc ? "  (−" + disc + "%)" : ""),
+                        );
+                    } catch (e) {
+                        console.error(
+                            "[PaymentWidget] custom recalc error:",
+                            e,
+                        );
+                        setAmountStatus(
+                            "Could not set amount (see console).",
+                            true,
+                        );
+                    }
+                    return;
+                }
+
+                // ── Catalog-priced plans (60/40, 3yr, 5yr, full payment) ──
+                if (disc > MAX_DISCOUNT) disc = MAX_DISCOUNT;
+                setAmountStatus("Calculating amount…");
+                try {
+                    const rowsData = await callBX("crm.deal.productrows.get", {
+                        id: currentDealId,
+                    });
+                    const rows = Array.isArray(rowsData)
+                        ? rowsData
+                        : rowsData.result || [];
+                    if (!rows.length) {
+                        setAmountStatus(
+                            "No products on this deal — add the unit in the Products tab.",
+                            true,
+                        );
+                        return;
+                    }
+
+                    let total = 0;
+                    const missing = [];
+                    for (let i = 0; i < rows.length; i++) {
+                        const pid = rows[i].PRODUCT_ID || rows[i].productId;
+                        const qty =
+                            parseFloat(
+                                rows[i].QUANTITY || rows[i].quantity || 1,
+                            ) || 1;
+                        if (!pid) continue;
+                        const price = await getProductPlanPrice(pid, plan);
+                        if (price === null) {
+                            missing.push(
+                                rows[i].PRODUCT_NAME ||
+                                    rows[i].productName ||
+                                    "#" + pid,
+                            );
+                            continue;
+                        }
+                        total += price * qty;
+                    }
+
+                    if (missing.length) {
+                        setAmountStatus(
+                            'No "' +
+                                (PLAN_LABELS[plan] || plan) +
+                                '" price found for: ' +
+                                missing.join(", "),
+                            true,
+                        );
+                        return;
+                    }
+
+                    const finalAmount =
+                        Math.round(total * (1 - disc / 100) * 100) / 100;
+
+                    await callBX("crm.deal.update", {
+                        id: currentDealId,
+                        fields: {
+                            OPPORTUNITY: finalAmount,
+                            IS_MANUAL_OPPORTUNITY: "Y",
+                        },
+                    });
+
+                    setAmountStatus(
+                        "Amount set: " +
+                            finalAmount.toLocaleString() +
+                            (disc ? "  (−" + disc + "%)" : ""),
+                    );
+                } catch (e) {
+                    console.error("[PaymentWidget] recalcDealAmount error:", e);
+                    setAmountStatus(
+                        "Could not calculate amount (see console).",
+                        true,
+                    );
+                }
+            }
+
+            function scheduleRecalc() {
+                clearTimeout(amountTimeout);
+                amountTimeout = setTimeout(recalcDealAmount, 700);
+            }
+
+            // Clamp the discount field for non-custom plans
+            function enforceDiscountCap() {
+                const plan = document.getElementById("paymentPlan").value;
+                const d = document.getElementById("discountPct");
+                if (
+                    plan &&
+                    plan !== "custom" &&
+                    parseFloat(d.value) > MAX_DISCOUNT
+                ) {
+                    d.value = MAX_DISCOUNT;
+                    setAmountStatus(
+                        "Max discount for this plan is " + MAX_DISCOUNT + "%.",
+                        true,
+                    );
+                }
+            }
+
+            // ── Balloon Rows ─────────────────────────────────────────────────────────────
+
+            function addBalloonRow(position, amount) {
+                balloonCounter++;
+                const idx = balloonCounter;
+
+                // Hide empty state
+                const empty = document.getElementById("balloonEmpty");
+                if (empty) empty.style.display = "none";
+
+                const row = document.createElement("div");
+                row.className = "balloon-row";
+                row.id = `balloonRow_${idx}`;
+                row.innerHTML = `
         <input type="text"   class="bx-input" placeholder="Installment Number"
-               data-balloon="position" value="${escapeHtml(position || '')}">
+               data-balloon="position" value="${escapeHtml(position || "")}">
         <input type="number" class="bx-input" placeholder="Amount (AED)"
-               data-balloon="amount" value="${escapeHtml(amount || '')}">
+               data-balloon="amount" value="${escapeHtml(amount || "")}">
         <button class="btn-remove-balloon" onclick="removeBalloonRow(${idx})"
                 type="button" title="Remove">&times;</button>
     `;
-    document.getElementById('balloonRows').appendChild(row);
-    notifyResize();
-    handleDataChange();
-}
-
-function removeBalloonRow(idx) {
-    const row = document.getElementById(`balloonRow_${idx}`);
-    if (row) row.remove();
-
-    // Show empty state if no rows left
-    const remaining = document.querySelectorAll('#balloonRows .balloon-row');
-    const empty = document.getElementById('balloonEmpty');
-    if (empty) empty.style.display = remaining.length === 0 ? 'block' : 'none';
-
-    notifyResize();
-    handleDataChange();
-}
-
-// Reset balloon rows to the empty state (used when leaving the Custom plan)
-function clearBalloons() {
-    document.getElementById('balloonRows').innerHTML =
-        '<div class="balloon-empty" id="balloonEmpty">No balloon payments added</div>';
-    balloonCounter = 0;
-}
-
-// ── Furnished toggle ──────────────────────────────────────────────────────────
-
-function onFurnishedChange() {
-    const on = document.getElementById('furnishedToggle').checked;
-    document.getElementById('furnishedState').innerText = on ? 'Yes' : 'No';
-    // Autosave is handled by the global 'change' listener.
-}
-function onPrivatePoolChange() {
-    const on = document.getElementById('privatePoolToggle').checked;
-    document.getElementById('privatePoolState').innerText = on ? 'Yes' : 'No';
-    // Autosave is handled by the global 'change' listener.
-}
-
-// ── Plan Toggle ───────────────────────────────────────────────────────────────
-
-// ── Plan field groups ─────────────────────────────────────────────────────────
-const INSTALLMENT_PLANS  = ['60_40', '3_years', '5_years'];
-const CUSTOM_FIELDS      = ['totalAmount', 'downpaymentPct', 'downpaymentDate',
-                            'dcPct', 'dcFreq', 'dcPayments', 'dcStartDate',
-                            'possessionPct', 'possessionDate',
-                            'phPct', 'phFreq', 'phPayments', 'phStartDate'];
-const INSTALLMENT_FIELDS = ['downpaymentStartDate'];
-const FULLPAYMENT_FIELDS = ['paymentDate'];
-
-function clearFields(ids) {
-    ids.forEach(function(id) {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-}
-
-function onPlanChange() {
-    const plan = document.getElementById('paymentPlan').value;
-    const isCustom      = plan === 'custom';
-    const isInstallment = INSTALLMENT_PLANS.indexOf(plan) !== -1;
-    const isFull        = plan === 'full_payment';
-
-    document.getElementById('customBlock').classList.toggle('visible', isCustom);
-    document.getElementById('installmentBlock').classList.toggle('visible', isInstallment);
-    document.getElementById('fullPaymentBlock').classList.toggle('visible', isFull);
-
-    // Balloon payments apply to Custom plans only
-    document.getElementById('balloonSection').style.display = isCustom ? '' : 'none';
-    if (!isCustom) clearBalloons();
-
-    // Reset the inputs of any block that is now hidden, so storage stays clean
-    if (!isCustom)      clearFields(CUSTOM_FIELDS);
-    if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
-    if (!isFull)        clearFields(FULLPAYMENT_FIELDS);
-
-    enforceDiscountCap();
-    notifyResize();
-    handleDataChange();
-    scheduleRecalc();                     // recalc handles both custom & catalog plans
-}
-
-// ── Collect Data ──────────────────────────────────────────────────────────────
-
-function collectData() {
-    const plan = document.getElementById('paymentPlan').value;
-
-    // Balloon payments apply to Custom plans only
-    const balloons = [];
-    if (plan === 'custom') {
-        document.querySelectorAll('#balloonRows .balloon-row').forEach(function(row) {
-            const pos = row.querySelector('[data-balloon="position"]').value.trim();
-            const amt = row.querySelector('[data-balloon="amount"]').value.trim();
-            if (pos || amt) balloons.push({ position: pos, amount: amt });
-        });
-    }
-
-    const data = {
-        paymentPlan:     plan,
-        discountPct:     document.getElementById('discountPct').value || '0',
-        balloonPayments: balloons,
-        furnished:       document.getElementById('furnishedToggle').checked ? 'Yes' : 'No',
-        privatePool:     document.getElementById('privatePoolToggle').checked ? 'Yes' : 'No'
-    };
-
-    // Custom plan details are stored ONLY while Custom is the selected plan
-    if (plan === 'custom') {
-        data.totalAmount     = document.getElementById('totalAmount').value     || '';
-        data.downpaymentPct  = document.getElementById('downpaymentPct').value  || '';
-        data.downpaymentDate = document.getElementById('downpaymentDate').value || '';
-
-        // During Construction
-        data.duringConstructionPct       = document.getElementById('dcPct').value       || '';
-        data.duringConstructionFreq      = document.getElementById('dcFreq').value      || '';
-        data.duringConstructionPayments  = document.getElementById('dcPayments').value  || '';
-        data.duringConstructionStartDate = document.getElementById('dcStartDate').value || '';
-
-        data.possessionPct   = document.getElementById('possessionPct').value   || '';
-        data.possessionDate  = document.getElementById('possessionDate').value  || '';
-
-        // Post Handover
-        data.postHandoverPct       = document.getElementById('phPct').value       || '';
-        data.postHandoverFreq      = document.getElementById('phFreq').value      || '';
-        data.postHandoverPayments  = document.getElementById('phPayments').value  || '';
-        data.postHandoverStartDate = document.getElementById('phStartDate').value || '';
-    }
-
-    // Schedule date stored only for 60/40, 3yr, 5yr (used as the schedule anchor in Booking/SPA)
-    if (INSTALLMENT_PLANS.indexOf(plan) !== -1) {
-        data.downpaymentStartDate = document.getElementById('downpaymentStartDate').value || '';
-    }
-
-    // Payment date stored only for Full Payment
-    if (plan === 'full_payment') {
-        data.paymentDate = document.getElementById('paymentDate').value || '';
-    }
-
-    // Selected unit (persists the picker choice across reloads)
-    data.unitId   = selectedUnitId   || '';
-    data.unitName = selectedUnitName  || '';
-
-    return data;
-}
-
-// ── Autosave ──────────────────────────────────────────────────────────────────
-
-function handleDataChange() {
-    clearTimeout(saveTimeout);
-    document.getElementById('saveIndicator').innerText = "Typing...";
-
-    saveTimeout = setTimeout(function() {
-        if (!currentDealId) {
-            document.getElementById('saveIndicator').innerText = "No Deal context.";
-            return;
-        }
-
-        document.getElementById('saveIndicator').innerText = "Saving...";
-        const data = collectData();
-        const payload = {};
-        payload[STORAGE_FIELD_KEY]    = JSON.stringify(data);
-        payload[PLAN_FIELD_KEY]       = planEnumValue(data.paymentPlan);
-        payload[PLAN_LIST_FIELD_KEY]  = planListEnumValue(data.paymentPlan);
-
-        BX24.callMethod('crm.deal.update', {
-            id:     currentDealId,
-            fields: payload
-        }, function(result) {
-            if (result.error()) {
-                document.getElementById('saveIndicator').innerText = "Save failed ✗";
-                console.error('crm.deal.update error:', result.error());
-            } else {
-                document.getElementById('saveIndicator').innerText = "Saved ✓";
+                document.getElementById("balloonRows").appendChild(row);
+                notifyResize();
+                handleDataChange();
             }
-        });
-    }, 700);
-}
 
-// ── Populate on Load ──────────────────────────────────────────────────────────
+            function removeBalloonRow(idx) {
+                const row = document.getElementById(`balloonRow_${idx}`);
+                if (row) row.remove();
 
-function populateFields(rawValue) {
-    if (!rawValue) return;
-    try {
-        const data = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+                // Show empty state if no rows left
+                const remaining = document.querySelectorAll(
+                    "#balloonRows .balloon-row",
+                );
+                const empty = document.getElementById("balloonEmpty");
+                if (empty)
+                    empty.style.display =
+                        remaining.length === 0 ? "block" : "none";
 
-        // Restore the saved unit selection (dropdown is populated later by initUnitSection)
-        if (data.unitId) {
-            selectedUnitId   = Number(data.unitId);
-            selectedUnitName = data.unitName || '';
-        }
+                notifyResize();
+                handleDataChange();
+            }
 
-        if (data.paymentPlan) {
-            const p = data.paymentPlan;
-            document.getElementById('paymentPlan').value = p;
-            document.getElementById('customBlock').classList.toggle('visible', p === 'custom');
-            document.getElementById('installmentBlock').classList.toggle(
-                'visible', INSTALLMENT_PLANS.indexOf(p) !== -1
-            );
-            document.getElementById('fullPaymentBlock').classList.toggle('visible', p === 'full_payment');
-        }
+            // Reset balloon rows to the empty state (used when leaving the Custom plan)
+            function clearBalloons() {
+                document.getElementById("balloonRows").innerHTML =
+                    '<div class="balloon-empty" id="balloonEmpty">No balloon payments added</div>';
+                balloonCounter = 0;
+            }
 
-        if (data.discountPct) document.getElementById('discountPct').value = data.discountPct;
+            // ── Furnished toggle ──────────────────────────────────────────────────────────
 
-        // Restore Furnished toggle (defaults to No / off)
-        var furnishedOn = (data.furnished === 'Yes' || data.furnished === true);
-        document.getElementById('furnishedToggle').checked = furnishedOn;
-        document.getElementById('furnishedState').innerText = furnishedOn ? 'Yes' : 'No';
+            function onFurnishedChange() {
+                const on = document.getElementById("furnishedToggle").checked;
+                document.getElementById("furnishedState").innerText = on
+                    ? "Yes"
+                    : "No";
+                // Autosave is handled by the global 'change' listener.
+            }
+            function onPrivatePoolChange() {
+                const on = document.getElementById("privatePoolToggle").checked;
+                document.getElementById("privatePoolState").innerText = on
+                    ? "Yes"
+                    : "No";
+                // Autosave is handled by the global 'change' listener.
+            }
 
-        // Restore Private Pool toggle (defaults to No / off)
-        var poolOn = (data.privatePool === 'Yes' || data.privatePool === true);
-        document.getElementById('privatePoolToggle').checked = poolOn;
-        document.getElementById('privatePoolState').innerText = poolOn ? 'Yes' : 'No';
+            // ── Plan Toggle ───────────────────────────────────────────────────────────────
 
-        if (Array.isArray(data.balloonPayments) && data.balloonPayments.length > 0) {
-            document.getElementById('balloonRows').innerHTML = '';
-            balloonCounter = 0;
-            data.balloonPayments.forEach(function(b) {
-                addBalloonRow(b.position, b.amount);
-            });
-        }
+            // ── Plan field groups ─────────────────────────────────────────────────────────
+            const INSTALLMENT_PLANS = ["60_40", "3_years", "5_years"];
+            const CUSTOM_FIELDS = [
+                "totalAmount",
+                "downpaymentPct",
+                "downpaymentDate",
+                "dcPct",
+                "dcFreq",
+                "dcPayments",
+                "dcStartDate",
+                "possessionPct",
+                "possessionDate",
+                "phPct",
+                "phFreq",
+                "phPayments",
+                "phStartDate",
+            ];
+            const INSTALLMENT_FIELDS = ["downpaymentStartDate"];
+            const FULLPAYMENT_FIELDS = ["paymentDate"];
 
-        // Restore Custom-plan inputs only when the saved plan is Custom
-        if (data.paymentPlan === 'custom') {
-            var customMap = {
-                totalAmount: 'totalAmount', downpaymentPct: 'downpaymentPct', downpaymentDate: 'downpaymentDate',
-                duringConstructionPct: 'dcPct', duringConstructionFreq: 'dcFreq',
-                duringConstructionPayments: 'dcPayments', duringConstructionStartDate: 'dcStartDate',
-                possessionPct: 'possessionPct', possessionDate: 'possessionDate',
-                postHandoverPct: 'phPct', postHandoverFreq: 'phFreq',
-                postHandoverPayments: 'phPayments', postHandoverStartDate: 'phStartDate'
-            };
-            Object.keys(customMap).forEach(function(key) {
-                var el = document.getElementById(customMap[key]);
-                if (el && data[key] !== undefined && data[key] !== '') el.value = data[key];
-            });
-        }
-
-        // Restore Schedule Date (60/40, 3yr, 5yr)
-        if (INSTALLMENT_PLANS.indexOf(data.paymentPlan) !== -1 && data.downpaymentStartDate) {
-            document.getElementById('downpaymentStartDate').value = data.downpaymentStartDate;
-        }
-
-        // Restore Payment Date (Full Payment)
-        if (data.paymentPlan === 'full_payment' && data.paymentDate) {
-            document.getElementById('paymentDate').value = data.paymentDate;
-        }
-    } catch(e) {
-        console.error("populateFields parse error:", e);
-    }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function notifyResize() {
-    if (window.BX24) BX24.fitWindow();
-}
-
-// ── Unit selection, status & gating ───────────────────────────────────────────
-//
-// CONFIG — adjust here only if names/ids change in Bitrix.
-const UNIT_STATUS_PROP_ID = 99;                 // PROPERTY_99 (unit status list field)
-const UNIT_SECTION_NAME   = 'Dubai Inventory';  // catalog section holding the units
-let   UNIT_SECTION_ID      = 53;                // Dubai Inventory section (resolved)
-let   UNIT_IBLOCK_ID       = 15;                // CRM Product Catalog iblock (resolved)
-const UNIT_PIPELINE_STAGE_BOOKING = 'Sales Booking';   // stage where a unit may be attached
-const ST_AVAILABLE = 'Available', ST_BOOKED = 'Booked', ST_SOLD = 'Sold', ST_RESERVED = 'Reserved';
-
-let _statusEnum      = null;   // { byId:{id:label}, byLabel:{label:id} }
-let _unitCatalog     = [];     // [{ id, name, status }]
-let _unitStatusById  = {};     // id -> status label
-let _currentStageName = '';
-let _isBookingStage   = false;
-let _attachedUnitId   = null;  // unit currently in THIS deal's product rows
-let selectedUnitId    = null;  // picker choice (persisted into the deal JSON)
-let selectedUnitName  = '';
-let _suppressSave     = false; // avoid autosave while restoring state on load
-
-// Resolve the four enum values of PROPERTY_99 → their value ids (needed to read/write)
-async function resolveStatusEnum() {
-    if (_statusEnum) return _statusEnum;
-    const data = await callBX('catalog.productPropertyEnum.list', {
-        select: ['id', 'propertyId', 'value'],
-        filter: { propertyId: UNIT_STATUS_PROP_ID }
-    });
-    const list = (data && data.productPropertyEnums) ? data.productPropertyEnums : firstArray(data);
-    const byId = {}, byLabel = {};
-    list.forEach(function(r) {
-        const id = Number(r.id || r.ID);
-        const val = String(r.value || r.VALUE || '');
-        byId[id] = val;
-        byLabel[val.toLowerCase()] = id;
-    });
-    _statusEnum = { byId: byId, byLabel: byLabel };
-    return _statusEnum;
-}
-
-// Turn a raw PROPERTY_99 value (id, {value}, or text) into its label
-function statusLabelFromRaw(raw) {
-    if (raw == null) return null;
-    if (Array.isArray(raw)) raw = raw[0];
-    if (raw && typeof raw === 'object') {
-        raw = (raw.value !== undefined ? raw.value
-             : raw.valueId !== undefined ? raw.valueId : raw.VALUE);
-    }
-    const n = Number(raw);
-    if (!isNaN(n) && _statusEnum && _statusEnum.byId[n]) return _statusEnum.byId[n];
-    return raw == null ? null : String(raw);
-}
-
-// Resolve the catalog iblockId (REQUIRED by catalog.product.list) and, if possible,
-// the "Dubai Inventory" section id. Override either via the CONFIG constants above.
-async function resolveCatalogIds() {
-    if (UNIT_IBLOCK_ID && (UNIT_SECTION_ID || UNIT_SECTION_ID === 0)) return;
-    try {
-        const cats = await callBX('catalog.catalog.list', {});
-        const clist = (cats && cats.catalogs) ? cats.catalogs : firstArray(cats);
-        let ids = [];
-        clist.forEach(function(c) {
-            ['iblockId', 'productIblockId', 'offerIblockId', 'IBLOCK_ID', 'id'].forEach(function(k) {
-                if (c[k] != null) ids.push(Number(c[k]));
-            });
-        });
-        ids = ids.filter(function(v, i, a) { return a.indexOf(v) === i; });
-
-        // Try to locate the Dubai Inventory section within a candidate iblock.
-        for (let i = 0; i < ids.length; i++) {
-            try {
-                const secs = await callBX('catalog.section.list', {
-                    select: ['id', 'name', 'iblockId'], filter: { iblockId: ids[i] }
+            function clearFields(ids) {
+                ids.forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (el) el.value = "";
                 });
-                const slist = (secs && secs.sections) ? secs.sections : firstArray(secs);
-                const m = slist.find(function(s) {
-                    return String(s.name || s.NAME || '').toLowerCase()
-                        .indexOf(UNIT_SECTION_NAME.toLowerCase()) !== -1;
+            }
+
+            function onPlanChange() {
+                const plan = document.getElementById("paymentPlan").value;
+                const isCustom = plan === "custom";
+                const isInstallment = INSTALLMENT_PLANS.indexOf(plan) !== -1;
+                const isFull = plan === "full_payment";
+
+                document
+                    .getElementById("customBlock")
+                    .classList.toggle("visible", isCustom);
+                document
+                    .getElementById("installmentBlock")
+                    .classList.toggle("visible", isInstallment);
+                document
+                    .getElementById("fullPaymentBlock")
+                    .classList.toggle("visible", isFull);
+
+                // Balloon payments apply to Custom plans only
+                document.getElementById("balloonSection").style.display =
+                    isCustom ? "" : "none";
+                if (!isCustom) clearBalloons();
+
+                // Reset the inputs of any block that is now hidden, so storage stays clean
+                if (!isCustom) clearFields(CUSTOM_FIELDS);
+                if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
+                if (!isFull) clearFields(FULLPAYMENT_FIELDS);
+
+                enforceDiscountCap();
+                notifyResize();
+                handleDataChange();
+                scheduleRecalc(); // recalc handles both custom & catalog plans
+            }
+
+            // ── Collect Data ──────────────────────────────────────────────────────────────
+
+            function collectData() {
+                const plan = document.getElementById("paymentPlan").value;
+
+                // Balloon payments apply to Custom plans only
+                const balloons = [];
+                if (plan === "custom") {
+                    document
+                        .querySelectorAll("#balloonRows .balloon-row")
+                        .forEach(function (row) {
+                            const pos = row
+                                .querySelector('[data-balloon="position"]')
+                                .value.trim();
+                            const amt = row
+                                .querySelector('[data-balloon="amount"]')
+                                .value.trim();
+                            if (pos || amt)
+                                balloons.push({ position: pos, amount: amt });
+                        });
+                }
+
+                const data = {
+                    paymentPlan: plan,
+                    discountPct:
+                        document.getElementById("discountPct").value || "0",
+                    balloonPayments: balloons,
+                    furnished: document.getElementById("furnishedToggle")
+                        .checked
+                        ? "Yes"
+                        : "No",
+                    privatePool: document.getElementById("privatePoolToggle")
+                        .checked
+                        ? "Yes"
+                        : "No",
+                };
+
+                // Custom plan details are stored ONLY while Custom is the selected plan
+                if (plan === "custom") {
+                    data.totalAmount =
+                        document.getElementById("totalAmount").value || "";
+                    data.downpaymentPct =
+                        document.getElementById("downpaymentPct").value || "";
+                    data.downpaymentDate =
+                        document.getElementById("downpaymentDate").value || "";
+
+                    // During Construction
+                    data.duringConstructionPct =
+                        document.getElementById("dcPct").value || "";
+                    data.duringConstructionFreq =
+                        document.getElementById("dcFreq").value || "";
+                    data.duringConstructionPayments =
+                        document.getElementById("dcPayments").value || "";
+                    data.duringConstructionStartDate =
+                        document.getElementById("dcStartDate").value || "";
+
+                    data.possessionPct =
+                        document.getElementById("possessionPct").value || "";
+                    data.possessionDate =
+                        document.getElementById("possessionDate").value || "";
+
+                    // Post Handover
+                    data.postHandoverPct =
+                        document.getElementById("phPct").value || "";
+                    data.postHandoverFreq =
+                        document.getElementById("phFreq").value || "";
+                    data.postHandoverPayments =
+                        document.getElementById("phPayments").value || "";
+                    data.postHandoverStartDate =
+                        document.getElementById("phStartDate").value || "";
+                }
+
+                // Schedule date stored only for 60/40, 3yr, 5yr (used as the schedule anchor in Booking/SPA)
+                if (INSTALLMENT_PLANS.indexOf(plan) !== -1) {
+                    data.downpaymentStartDate =
+                        document.getElementById("downpaymentStartDate").value ||
+                        "";
+                }
+
+                // Payment date stored only for Full Payment
+                if (plan === "full_payment") {
+                    data.paymentDate =
+                        document.getElementById("paymentDate").value || "";
+                }
+
+                // Selected unit (persists the picker choice across reloads)
+                data.unitId = selectedUnitId || "";
+                data.unitName = selectedUnitName || "";
+
+                return data;
+            }
+
+            // ── Autosave ──────────────────────────────────────────────────────────────────
+
+            function handleDataChange() {
+                clearTimeout(saveTimeout);
+                document.getElementById("saveIndicator").innerText =
+                    "Typing...";
+
+                saveTimeout = setTimeout(function () {
+                    if (!currentDealId) {
+                        document.getElementById("saveIndicator").innerText =
+                            "No Deal context.";
+                        return;
+                    }
+
+                    document.getElementById("saveIndicator").innerText =
+                        "Saving...";
+                    const data = collectData();
+                    const payload = {};
+                    payload[STORAGE_FIELD_KEY] = JSON.stringify(data);
+                    payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
+                    payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(
+                        data.paymentPlan,
+                    );
+
+                    BX24.callMethod(
+                        "crm.deal.update",
+                        {
+                            id: currentDealId,
+                            fields: payload,
+                        },
+                        function (result) {
+                            if (result.error()) {
+                                document.getElementById(
+                                    "saveIndicator",
+                                ).innerText = "Save failed ✗";
+                                console.error(
+                                    "crm.deal.update error:",
+                                    result.error(),
+                                );
+                            } else {
+                                document.getElementById(
+                                    "saveIndicator",
+                                ).innerText = "Saved ✓";
+                            }
+                        },
+                    );
+                }, 700);
+            }
+
+            // ── Populate on Load ──────────────────────────────────────────────────────────
+
+            function populateFields(rawValue) {
+                if (!rawValue) return;
+                try {
+                    const data =
+                        typeof rawValue === "string"
+                            ? JSON.parse(rawValue)
+                            : rawValue;
+
+                    // Restore the saved unit selection (dropdown is populated later by initUnitSection)
+                    if (data.unitId) {
+                        selectedUnitId = Number(data.unitId);
+                        selectedUnitName = data.unitName || "";
+                    }
+
+                    if (data.paymentPlan) {
+                        const p = data.paymentPlan;
+                        document.getElementById("paymentPlan").value = p;
+                        document
+                            .getElementById("customBlock")
+                            .classList.toggle("visible", p === "custom");
+                        document
+                            .getElementById("installmentBlock")
+                            .classList.toggle(
+                                "visible",
+                                INSTALLMENT_PLANS.indexOf(p) !== -1,
+                            );
+                        document
+                            .getElementById("fullPaymentBlock")
+                            .classList.toggle("visible", p === "full_payment");
+                    }
+
+                    if (data.discountPct)
+                        document.getElementById("discountPct").value =
+                            data.discountPct;
+
+                    // Restore Furnished toggle (defaults to No / off)
+                    var furnishedOn =
+                        data.furnished === "Yes" || data.furnished === true;
+                    document.getElementById("furnishedToggle").checked =
+                        furnishedOn;
+                    document.getElementById("furnishedState").innerText =
+                        furnishedOn ? "Yes" : "No";
+
+                    // Restore Private Pool toggle (defaults to No / off)
+                    var poolOn =
+                        data.privatePool === "Yes" || data.privatePool === true;
+                    document.getElementById("privatePoolToggle").checked =
+                        poolOn;
+                    document.getElementById("privatePoolState").innerText =
+                        poolOn ? "Yes" : "No";
+
+                    if (
+                        Array.isArray(data.balloonPayments) &&
+                        data.balloonPayments.length > 0
+                    ) {
+                        document.getElementById("balloonRows").innerHTML = "";
+                        balloonCounter = 0;
+                        data.balloonPayments.forEach(function (b) {
+                            addBalloonRow(b.position, b.amount);
+                        });
+                    }
+
+                    // Restore Custom-plan inputs only when the saved plan is Custom
+                    if (data.paymentPlan === "custom") {
+                        var customMap = {
+                            totalAmount: "totalAmount",
+                            downpaymentPct: "downpaymentPct",
+                            downpaymentDate: "downpaymentDate",
+                            duringConstructionPct: "dcPct",
+                            duringConstructionFreq: "dcFreq",
+                            duringConstructionPayments: "dcPayments",
+                            duringConstructionStartDate: "dcStartDate",
+                            possessionPct: "possessionPct",
+                            possessionDate: "possessionDate",
+                            postHandoverPct: "phPct",
+                            postHandoverFreq: "phFreq",
+                            postHandoverPayments: "phPayments",
+                            postHandoverStartDate: "phStartDate",
+                        };
+                        Object.keys(customMap).forEach(function (key) {
+                            var el = document.getElementById(customMap[key]);
+                            if (
+                                el &&
+                                data[key] !== undefined &&
+                                data[key] !== ""
+                            )
+                                el.value = data[key];
+                        });
+                    }
+
+                    // Restore Schedule Date (60/40, 3yr, 5yr)
+                    if (
+                        INSTALLMENT_PLANS.indexOf(data.paymentPlan) !== -1 &&
+                        data.downpaymentStartDate
+                    ) {
+                        document.getElementById("downpaymentStartDate").value =
+                            data.downpaymentStartDate;
+                    }
+
+                    // Restore Payment Date (Full Payment)
+                    if (
+                        data.paymentPlan === "full_payment" &&
+                        data.paymentDate
+                    ) {
+                        document.getElementById("paymentDate").value =
+                            data.paymentDate;
+                    }
+                } catch (e) {
+                    console.error("populateFields parse error:", e);
+                }
+            }
+
+            // ── Helpers ───────────────────────────────────────────────────────────────────
+
+            function escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+
+            function notifyResize() {
+                if (window.BX24) BX24.fitWindow();
+            }
+
+            // ── Unit selection, status & gating ───────────────────────────────────────────
+            //
+            // CONFIG — adjust here only if names/ids change in Bitrix.
+            const UNIT_STATUS_PROP_ID = 99; // PROPERTY_99 (unit status list field)
+            const UNIT_SECTION_NAME = "Dubai Inventory"; // catalog section holding the units
+            let UNIT_SECTION_ID = 53; // Dubai Inventory section (resolved)
+            let UNIT_IBLOCK_ID = 15; // CRM Product Catalog iblock (resolved)
+            const UNIT_PIPELINE_STAGE_BOOKING = "Sales Booking"; // stage where a unit may be attached
+            const ST_AVAILABLE = "Available",
+                ST_BOOKED = "Booked",
+                ST_SOLD = "Sold",
+                ST_RESERVED = "Reserved";
+
+            let _statusEnum = null; // { byId:{id:label}, byLabel:{label:id} }
+            let _unitCatalog = []; // [{ id, name, status }]
+            let _unitStatusById = {}; // id -> status label
+            let _currentStageName = "";
+            let _isBookingStage = false;
+            let _attachedUnitId = null; // unit currently in THIS deal's product rows
+            let selectedUnitId = null; // picker choice (persisted into the deal JSON)
+            let selectedUnitName = "";
+            let _suppressSave = false; // avoid autosave while restoring state on load
+
+            // Resolve the four enum values of PROPERTY_99 → their value ids (needed to read/write)
+            async function resolveStatusEnum() {
+                if (_statusEnum) return _statusEnum;
+                const data = await callBX("catalog.productPropertyEnum.list", {
+                    select: ["id", "propertyId", "value"],
+                    filter: { propertyId: UNIT_STATUS_PROP_ID },
                 });
-                if (m) {
-                    if (!UNIT_IBLOCK_ID)  UNIT_IBLOCK_ID  = ids[i];
-                    if (!UNIT_SECTION_ID) UNIT_SECTION_ID = Number(m.id || m.ID);
+                const list =
+                    data && data.productPropertyEnums
+                        ? data.productPropertyEnums
+                        : firstArray(data);
+                const byId = {},
+                    byLabel = {};
+                list.forEach(function (r) {
+                    const id = Number(r.id || r.ID);
+                    const val = String(r.value || r.VALUE || "");
+                    byId[id] = val;
+                    byLabel[val.toLowerCase()] = id;
+                });
+                _statusEnum = { byId: byId, byLabel: byLabel };
+                return _statusEnum;
+            }
+
+            // Turn a raw PROPERTY_99 value (id, {value}, or text) into its label
+            function statusLabelFromRaw(raw) {
+                if (raw == null) return null;
+                if (Array.isArray(raw)) raw = raw[0];
+                if (raw && typeof raw === "object") {
+                    raw =
+                        raw.value !== undefined
+                            ? raw.value
+                            : raw.valueId !== undefined
+                              ? raw.valueId
+                              : raw.VALUE;
+                }
+                const n = Number(raw);
+                if (!isNaN(n) && _statusEnum && _statusEnum.byId[n])
+                    return _statusEnum.byId[n];
+                return raw == null ? null : String(raw);
+            }
+
+            // Resolve the catalog iblockId (REQUIRED by catalog.product.list) and, if possible,
+            // the "Dubai Inventory" section id. Override either via the CONFIG constants above.
+            async function resolveCatalogIds() {
+                if (
+                    UNIT_IBLOCK_ID &&
+                    (UNIT_SECTION_ID || UNIT_SECTION_ID === 0)
+                )
+                    return;
+                try {
+                    const cats = await callBX("catalog.catalog.list", {});
+                    const clist =
+                        cats && cats.catalogs
+                            ? cats.catalogs
+                            : firstArray(cats);
+                    let ids = [];
+                    clist.forEach(function (c) {
+                        [
+                            "iblockId",
+                            "productIblockId",
+                            "offerIblockId",
+                            "IBLOCK_ID",
+                            "id",
+                        ].forEach(function (k) {
+                            if (c[k] != null) ids.push(Number(c[k]));
+                        });
+                    });
+                    ids = ids.filter(function (v, i, a) {
+                        return a.indexOf(v) === i;
+                    });
+
+                    // Try to locate the Dubai Inventory section within a candidate iblock.
+                    for (let i = 0; i < ids.length; i++) {
+                        try {
+                            const secs = await callBX("catalog.section.list", {
+                                select: ["id", "name", "iblockId"],
+                                filter: { iblockId: ids[i] },
+                            });
+                            const slist =
+                                secs && secs.sections
+                                    ? secs.sections
+                                    : firstArray(secs);
+                            const m = slist.find(function (s) {
+                                return (
+                                    String(s.name || s.NAME || "")
+                                        .toLowerCase()
+                                        .indexOf(
+                                            UNIT_SECTION_NAME.toLowerCase(),
+                                        ) !== -1
+                                );
+                            });
+                            if (m) {
+                                if (!UNIT_IBLOCK_ID) UNIT_IBLOCK_ID = ids[i];
+                                if (!UNIT_SECTION_ID)
+                                    UNIT_SECTION_ID = Number(m.id || m.ID);
+                                return;
+                            }
+                        } catch (e) {
+                            /* try next iblock */
+                        }
+                    }
+                    // No section match — fall back to the first catalog iblock (lists all its products).
+                    if (!UNIT_IBLOCK_ID && ids.length) UNIT_IBLOCK_ID = ids[0];
+                } catch (e) {
+                    console.warn(
+                        "[Unit] catalog id auto-resolve failed. Set UNIT_IBLOCK_ID " +
+                            "(and optionally UNIT_SECTION_ID) at the top of the unit script.",
+                        e,
+                    );
+                }
+            }
+
+            // Load all units + their statuses (property99 comes back in the list response)
+            async function loadUnits() {
+                await resolveStatusEnum();
+                await resolveCatalogIds();
+                let all = [],
+                    start = 0,
+                    guard = 0;
+                while (guard++ < 40) {
+                    const filter = {};
+                    if (UNIT_IBLOCK_ID) filter.iblockId = UNIT_IBLOCK_ID; // required by the method
+                    if (UNIT_SECTION_ID)
+                        filter.iblockSectionId = UNIT_SECTION_ID; // optional narrowing
+                    const params = {
+                        select: [
+                            "id",
+                            "name",
+                            "iblockId",
+                            "iblockSectionId",
+                            "property" + UNIT_STATUS_PROP_ID,
+                        ],
+                        filter: filter,
+                        start: start,
+                    };
+                    const data = await callBX("catalog.product.list", params);
+                    const batch =
+                        data && data.products
+                            ? data.products
+                            : firstArray(data);
+                    all = all.concat(batch);
+                    if (batch.length < 50) break;
+                    start += 50;
+                }
+                _unitCatalog = all.map(function (p) {
+                    const raw = p["property" + UNIT_STATUS_PROP_ID];
+                    const status = statusLabelFromRaw(raw);
+                    const rec = {
+                        id: Number(p.id || p.ID),
+                        name: String(p.name || p.NAME || "#" + (p.id || p.ID)),
+                        status: status,
+                    };
+                    _unitStatusById[rec.id] = status;
+                    return rec;
+                });
+                return _unitCatalog;
+            }
+
+            function populateUnitDropdown() {
+                const sel = document.getElementById("unitSelect");
+                sel.innerHTML = '<option value="">— Select unit —</option>';
+                _unitCatalog
+                    .slice()
+                    .sort(function (a, b) {
+                        return a.name.localeCompare(b.name);
+                    })
+                    .forEach(function (u) {
+                        const o = document.createElement("option");
+                        o.value = u.id;
+                        o.textContent = u.name;
+                        sel.appendChild(o);
+                    });
+                if (selectedUnitId) sel.value = String(selectedUnitId);
+            }
+
+            function badgeClassFor(label) {
+                const l = (label || "").toLowerCase();
+                if (l === "available") return "available";
+                if (l === "reserved") return "reserved";
+                if (l === "booked") return "booked";
+                if (l === "sold") return "sold";
+                return "empty";
+            }
+
+            function setPaymentLocked(locked) {
+                const body = document.getElementById("paymentBody");
+                if (body) body.classList.toggle("locked", !!locked);
+            }
+
+            function showGateMsg(msg, isError) {
+                const el = document.getElementById("unitGateMsg");
+                el.textContent = msg || "";
+                el.style.color = isError ? "#c62828" : "#8e99a4";
+                el.style.display = msg ? "block" : "none";
+                notifyResize();
+            }
+
+            // Core gating: decide what to show/allow for the chosen unit
+            function onUnitChange() {
+                const sel = document.getElementById("unitSelect");
+                const id = sel.value ? Number(sel.value) : null;
+                const badge = document.getElementById("unitStatusBadge");
+                const attachBtn = document.getElementById("attachBtn");
+                attachBtn.style.display = "none";
+
+                if (!id) {
+                    selectedUnitId = null;
+                    selectedUnitName = "";
+                    badge.className = "status-badge empty";
+                    badge.textContent = "—";
+                    setPaymentLocked(true);
+                    showGateMsg(
+                        "Select a unit to enter payment details.",
+                        false,
+                    );
+                    if (!_suppressSave) handleDataChange();
                     return;
                 }
-            } catch (e) { /* try next iblock */ }
-        }
-        // No section match — fall back to the first catalog iblock (lists all its products).
-        if (!UNIT_IBLOCK_ID && ids.length) UNIT_IBLOCK_ID = ids[0];
-    } catch (e) {
-        console.warn('[Unit] catalog id auto-resolve failed. Set UNIT_IBLOCK_ID ' +
-            '(and optionally UNIT_SECTION_ID) at the top of the unit script.', e);
-    }
-}
 
-// Load all units + their statuses (property99 comes back in the list response)
-async function loadUnits() {
-    await resolveStatusEnum();
-    await resolveCatalogIds();
-    let all = [], start = 0, guard = 0;
-    while (guard++ < 40) {
-        const filter = {};
-        if (UNIT_IBLOCK_ID)  filter.iblockId = UNIT_IBLOCK_ID;            // required by the method
-        if (UNIT_SECTION_ID) filter.iblockSectionId = UNIT_SECTION_ID;   // optional narrowing
-        const params = {
-            select: ['id', 'name', 'iblockSectionId', 'property' + UNIT_STATUS_PROP_ID],
-            filter: filter,
-            start: start
-        };
-        const data = await callBX('catalog.product.list', params);
-        const batch = (data && data.products) ? data.products : firstArray(data);
-        all = all.concat(batch);
-        if (batch.length < 50) break;
-        start += 50;
-    }
-    _unitCatalog = all.map(function(p) {
-        const raw = p['property' + UNIT_STATUS_PROP_ID];
-        const status = statusLabelFromRaw(raw);
-        const rec = {
-            id: Number(p.id || p.ID),
-            name: String(p.name || p.NAME || ('#' + (p.id || p.ID))),
-            status: status
-        };
-        _unitStatusById[rec.id] = status;
-        return rec;
-    });
-    return _unitCatalog;
-}
+                selectedUnitId = id;
+                const opt = sel.options[sel.selectedIndex];
+                selectedUnitName = opt ? opt.textContent : "";
+                const status = _unitStatusById[id] || null;
+                badge.className = "status-badge " + badgeClassFor(status);
+                badge.textContent = status || "—";
 
-function populateUnitDropdown() {
-    const sel = document.getElementById('unitSelect');
-    sel.innerHTML = '<option value="">— Select unit —</option>';
-    _unitCatalog.slice().sort(function(a, b) { return a.name.localeCompare(b.name); })
-        .forEach(function(u) {
-            const o = document.createElement('option');
-            o.value = u.id;
-            o.textContent = u.name;
-            sel.appendChild(o);
-        });
-    if (selectedUnitId) sel.value = String(selectedUnitId);
-}
+                const isOurs =
+                    _attachedUnitId && Number(_attachedUnitId) === id;
+                const sl = (status || "").toLowerCase();
 
-function badgeClassFor(label) {
-    const l = (label || '').toLowerCase();
-    if (l === 'available') return 'available';
-    if (l === 'reserved')  return 'reserved';
-    if (l === 'booked')    return 'booked';
-    if (l === 'sold')      return 'sold';
-    return 'empty';
-}
-
-function setPaymentLocked(locked) {
-    const body = document.getElementById('paymentBody');
-    if (body) body.classList.toggle('locked', !!locked);
-}
-
-function showGateMsg(msg, isError) {
-    const el = document.getElementById('unitGateMsg');
-    el.textContent = msg || '';
-    el.style.color = isError ? '#c62828' : '#8e99a4';
-    el.style.display = msg ? 'block' : 'none';
-    notifyResize();
-}
-
-// Core gating: decide what to show/allow for the chosen unit
-function onUnitChange() {
-    const sel = document.getElementById('unitSelect');
-    const id = sel.value ? Number(sel.value) : null;
-    const badge = document.getElementById('unitStatusBadge');
-    const attachBtn = document.getElementById('attachBtn');
-    attachBtn.style.display = 'none';
-
-    if (!id) {
-        selectedUnitId = null; selectedUnitName = '';
-        badge.className = 'status-badge empty'; badge.textContent = '—';
-        setPaymentLocked(true);
-        showGateMsg('Select a unit to enter payment details.', false);
-        if (!_suppressSave) handleDataChange();
-        return;
-    }
-
-    selectedUnitId = id;
-    const opt = sel.options[sel.selectedIndex];
-    selectedUnitName = opt ? opt.textContent : '';
-    const status = _unitStatusById[id] || null;
-    badge.className = 'status-badge ' + badgeClassFor(status);
-    badge.textContent = status || '—';
-
-    const isOurs = (_attachedUnitId && Number(_attachedUnitId) === id);
-    const sl = (status || '').toLowerCase();
-
-    if (isOurs) {
-        // Unit already belongs to this deal → payments stay editable regardless of status
-        setPaymentLocked(false);
-        showGateMsg('', false);
-    } else if (sl === 'available') {
-        setPaymentLocked(false);
-        showGateMsg('', false);
-        if (_isBookingStage) {
-            attachBtn.style.display = 'block';
-            attachBtn.disabled = false;
-            attachBtn.textContent = 'Attach unit & mark Booked';
-        } else {
-            showGateMsg('Unit is available. It can be attached once the deal reaches "Sales Booking".', false);
-        }
-    } else if (sl === 'booked' || sl === 'sold') {
-        setPaymentLocked(true);
-        showGateMsg('This unit is ' + status + ' on another deal and cannot be used. Please choose an available unit.', true);
-    } else if (sl === 'reserved') {
-        setPaymentLocked(true);
-        showGateMsg('This unit is Reserved and cannot be used right now.', true);
-    } else {
-        setPaymentLocked(true);
-        showGateMsg('Unit status could not be read. Please choose another unit.', true);
-    }
-    if (!_suppressSave) handleDataChange();
-}
-
-// Attach the chosen available unit → backend books it (atomic re-check + product row + status)
-async function attachUnit() {
-    if (!currentDealId || !selectedUnitId) return;
-    const btn = document.getElementById('attachBtn');
-    btn.disabled = true; btn.textContent = 'Attaching…';
-    try {
-        const resp = await fetch(window.location.origin + '/book', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dealId: currentDealId, productId: selectedUnitId })
-        });
-        const out = await resp.json();
-        const badge = document.getElementById('unitStatusBadge');
-
-        if (out.ok) {
-            _attachedUnitId = selectedUnitId;
-            _unitStatusById[selectedUnitId] = ST_BOOKED;
-            badge.className = 'status-badge booked'; badge.textContent = ST_BOOKED;
-            btn.style.display = 'none';
-            setPaymentLocked(false);
-            showGateMsg('Unit attached and marked Booked.', false);
-            handleDataChange();
-            if (typeof scheduleRecalc === 'function') scheduleRecalc();
-        } else if (out.reason === 'not_available') {
-            _unitStatusById[selectedUnitId] = out.status;
-            badge.className = 'status-badge ' + badgeClassFor(out.status);
-            badge.textContent = out.status;
-            btn.style.display = 'none';
-            setPaymentLocked(true);
-            showGateMsg('This unit was just taken (now ' + out.status + '). Please choose another available unit.', true);
-        } else if (out.reason === 'wrong_stage') {
-            btn.disabled = false; btn.textContent = 'Attach unit & mark Booked';
-            showGateMsg('Units can only be attached at the "Sales Booking" stage.', true);
-        } else {
-            btn.disabled = false; btn.textContent = 'Retry attach';
-            showGateMsg('Could not attach the unit' + (out.error ? (': ' + out.error) : '') + '.', true);
-        }
-    } catch (e) {
-        btn.disabled = false; btn.textContent = 'Retry attach';
-        showGateMsg('Network error while attaching the unit. Please retry.', true);
-        console.error('[attachUnit]', e);
-    }
-    notifyResize();
-}
-
-// Resolve this deal's stage NAME so we know if it's "Sales Booking"
-async function resolveDealStage(dealData) {
-    try {
-        const catId = (dealData.CATEGORY_ID != null) ? dealData.CATEGORY_ID : 0;
-        const entityId = (String(catId) !== '0') ? ('DEAL_STAGE_' + catId) : 'DEAL_STAGE';
-        const stages = await callBX('crm.status.list', {
-            order: { SORT: 'ASC' }, filter: { ENTITY_ID: entityId }
-        });
-        const list = firstArray(stages);
-        const norm = function(s) { s = String(s || ''); const i = s.indexOf(':'); return i >= 0 ? s.slice(i + 1) : s; };
-        const cur = list.find(function(s) { return norm(s.STATUS_ID) === norm(dealData.STAGE_ID); });
-        _currentStageName = cur ? String(cur.NAME || '') : '';
-        _isBookingStage = _currentStageName.toLowerCase() === UNIT_PIPELINE_STAGE_BOOKING.toLowerCase();
-    } catch (e) {
-        console.warn('[Unit] stage resolve failed', e);
-        _isBookingStage = false;
-    }
-}
-
-// Called from BX24.init once the deal is loaded
-async function initUnitSection(dealData) {
-    try {
-        await resolveDealStage(dealData);
-        await loadUnits();
-        populateUnitDropdown();
-
-        // Which unit is currently attached to THIS deal (native product rows)?
-        try {
-            const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
-            const rows = firstArray(rowsData);
-            if (rows.length) _attachedUnitId = Number(rows[0].PRODUCT_ID || rows[0].productId);
-        } catch (e) { console.warn('[Unit] productrows.get failed', e); }
-
-        // Prefer the saved picker choice; fall back to the attached unit
-        if (selectedUnitId == null && _attachedUnitId) selectedUnitId = _attachedUnitId;
-
-        if (selectedUnitId && _unitStatusById[selectedUnitId] == null) {
-            // Selected unit wasn't in the section list — fetch its status directly
-            try {
-                const g = await callBX('catalog.product.get', { id: selectedUnitId });
-                const pr = (g && g.product) ? g.product : g;
-                _unitStatusById[selectedUnitId] = statusLabelFromRaw(pr['property' + UNIT_STATUS_PROP_ID]);
-                if (!document.querySelector('#unitSelect option[value="' + selectedUnitId + '"]')) {
-                    const o = document.createElement('option');
-                    o.value = selectedUnitId; o.textContent = selectedUnitName || ('#' + selectedUnitId);
-                    document.getElementById('unitSelect').appendChild(o);
+                if (isOurs) {
+                    // Unit already belongs to this deal → payments stay editable regardless of status
+                    setPaymentLocked(false);
+                    showGateMsg("", false);
+                } else if (sl === "available") {
+                    setPaymentLocked(false);
+                    showGateMsg("", false);
+                    if (_isBookingStage) {
+                        attachBtn.style.display = "block";
+                        attachBtn.disabled = false;
+                        attachBtn.textContent = "Attach unit & mark Booked";
+                    } else {
+                        showGateMsg(
+                            'Unit is available. It can be attached once the deal reaches "Sales Booking".',
+                            false,
+                        );
+                    }
+                } else if (sl === "booked" || sl === "sold") {
+                    setPaymentLocked(true);
+                    showGateMsg(
+                        "This unit is " +
+                            status +
+                            " on another deal and cannot be used. Please choose an available unit.",
+                        true,
+                    );
+                } else if (sl === "reserved") {
+                    setPaymentLocked(true);
+                    showGateMsg(
+                        "This unit is Reserved and cannot be used right now.",
+                        true,
+                    );
+                } else {
+                    setPaymentLocked(true);
+                    showGateMsg(
+                        "Unit status could not be read. Please choose another unit.",
+                        true,
+                    );
                 }
-            } catch (e) { console.warn('[Unit] status fetch for selected unit failed', e); }
-        }
-        if (selectedUnitId) document.getElementById('unitSelect').value = String(selectedUnitId);
-
-        _suppressSave = true;
-        onUnitChange();          // paint badge + apply gating from restored/attached state
-        _suppressSave = false;
-    } catch (e) {
-        console.error('[Unit] init failed', e);
-        setPaymentLocked(false); // fail open so existing deals stay usable
-    }
-    notifyResize();
-}
-
-// ── BX24 Init ─────────────────────────────────────────────────────────────────
-
-BX24.init(function() {
-    const info = BX24.placement.info();
-    currentDealId = (info && info.options)
-        ? (info.options.ID || info.options.id || null)
-        : null;
-
-    if (currentDealId) {
-        BX24.callMethod('crm.deal.get', { id: currentDealId }, function(result) {
-            if (result.error()) {
-                document.getElementById('saveIndicator').innerText = "Load error ✗";
-                console.error('crm.deal.get error:', result.error());
-            } else {
-                const dealData = result.data();
-                if (dealData && dealData[STORAGE_FIELD_KEY]) {
-                    populateFields(dealData[STORAGE_FIELD_KEY]);
-                }
-                document.getElementById('saveIndicator').innerText = "Ready ✓";
-                notifyResize();
-                initUnitSection(dealData);   // load units, resolve stage, apply gating
+                if (!_suppressSave) handleDataChange();
             }
-        });
-    } else {
-        document.getElementById('saveIndicator').innerText = "No Deal context.";
-        console.warn("placement.info() returned no ID:", info);
-    }
 
-    notifyResize();
-});
+            // Attach the chosen available unit → backend books it (atomic re-check + product row + status)
+            async function attachUnit() {
+                if (!currentDealId || !selectedUnitId) return;
+                const btn = document.getElementById("attachBtn");
+                btn.disabled = true;
+                btn.textContent = "Attaching…";
+                try {
+                    const resp = await fetch(window.location.origin + "/book", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            dealId: currentDealId,
+                            productId: selectedUnitId,
+                        }),
+                    });
+                    const out = await resp.json();
+                    const badge = document.getElementById("unitStatusBadge");
 
-document.addEventListener('input',  handleDataChange);
-document.addEventListener('change', handleDataChange);
+                    if (out.ok) {
+                        _attachedUnitId = selectedUnitId;
+                        _unitStatusById[selectedUnitId] = ST_BOOKED;
+                        badge.className = "status-badge booked";
+                        badge.textContent = ST_BOOKED;
+                        btn.style.display = "none";
+                        setPaymentLocked(false);
+                        showGateMsg("Unit attached and marked Booked.", false);
+                        handleDataChange();
+                        if (typeof scheduleRecalc === "function")
+                            scheduleRecalc();
+                    } else if (out.reason === "not_available") {
+                        _unitStatusById[selectedUnitId] = out.status;
+                        badge.className =
+                            "status-badge " + badgeClassFor(out.status);
+                        badge.textContent = out.status;
+                        btn.style.display = "none";
+                        setPaymentLocked(true);
+                        showGateMsg(
+                            "This unit was just taken (now " +
+                                out.status +
+                                "). Please choose another available unit.",
+                            true,
+                        );
+                    } else if (out.reason === "wrong_stage") {
+                        btn.disabled = false;
+                        btn.textContent = "Attach unit & mark Booked";
+                        showGateMsg(
+                            'Units can only be attached at the "Sales Booking" stage.',
+                            true,
+                        );
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = "Retry attach";
+                        showGateMsg(
+                            "Could not attach the unit" +
+                                (out.error ? ": " + out.error : "") +
+                                ".",
+                            true,
+                        );
+                    }
+                } catch (e) {
+                    btn.disabled = false;
+                    btn.textContent = "Retry attach";
+                    showGateMsg(
+                        "Network error while attaching the unit. Please retry.",
+                        true,
+                    );
+                    console.error("[attachUnit]", e);
+                }
+                notifyResize();
+            }
 
-// Discount field: enforce the 15% cap and re-calculate the amount
-document.getElementById('discountPct').addEventListener('input', function() {
-    enforceDiscountCap();
-    scheduleRecalc();
-});
+            // Resolve this deal's stage NAME so we know if it's "Sales Booking"
+            async function resolveDealStage(dealData) {
+                try {
+                    const catId =
+                        dealData.CATEGORY_ID != null ? dealData.CATEGORY_ID : 0;
+                    const entityId =
+                        String(catId) !== "0"
+                            ? "DEAL_STAGE_" + catId
+                            : "DEAL_STAGE";
+                    const stages = await callBX("crm.status.list", {
+                        order: { SORT: "ASC" },
+                        filter: { ENTITY_ID: entityId },
+                    });
+                    const list = firstArray(stages);
+                    const norm = function (s) {
+                        s = String(s || "");
+                        const i = s.indexOf(":");
+                        return i >= 0 ? s.slice(i + 1) : s;
+                    };
+                    const cur = list.find(function (s) {
+                        return norm(s.STATUS_ID) === norm(dealData.STAGE_ID);
+                    });
+                    _currentStageName = cur ? String(cur.NAME || "") : "";
+                    _isBookingStage =
+                        _currentStageName.toLowerCase() ===
+                        UNIT_PIPELINE_STAGE_BOOKING.toLowerCase();
+                } catch (e) {
+                    console.warn("[Unit] stage resolve failed", e);
+                    _isBookingStage = false;
+                }
+            }
 
-// Custom Total Amount: re-calculate the deal amount as it's typed
-document.getElementById('totalAmount').addEventListener('input', scheduleRecalc);
-</script>
-</body>
+            // Called from BX24.init once the deal is loaded
+            async function initUnitSection(dealData) {
+                try {
+                    await resolveDealStage(dealData);
+                    await loadUnits();
+                    populateUnitDropdown();
+
+                    // Which unit is currently attached to THIS deal (native product rows)?
+                    try {
+                        const rowsData = await callBX(
+                            "crm.deal.productrows.get",
+                            { id: currentDealId },
+                        );
+                        const rows = firstArray(rowsData);
+                        if (rows.length)
+                            _attachedUnitId = Number(
+                                rows[0].PRODUCT_ID || rows[0].productId,
+                            );
+                    } catch (e) {
+                        console.warn("[Unit] productrows.get failed", e);
+                    }
+
+                    // Prefer the saved picker choice; fall back to the attached unit
+                    if (selectedUnitId == null && _attachedUnitId)
+                        selectedUnitId = _attachedUnitId;
+
+                    if (
+                        selectedUnitId &&
+                        _unitStatusById[selectedUnitId] == null
+                    ) {
+                        // Selected unit wasn't in the section list — fetch its status directly
+                        try {
+                            const g = await callBX("catalog.product.get", {
+                                id: selectedUnitId,
+                            });
+                            const pr = g && g.product ? g.product : g;
+                            _unitStatusById[selectedUnitId] =
+                                statusLabelFromRaw(
+                                    pr["property" + UNIT_STATUS_PROP_ID],
+                                );
+                            if (
+                                !document.querySelector(
+                                    '#unitSelect option[value="' +
+                                        selectedUnitId +
+                                        '"]',
+                                )
+                            ) {
+                                const o = document.createElement("option");
+                                o.value = selectedUnitId;
+                                o.textContent =
+                                    selectedUnitName || "#" + selectedUnitId;
+                                document
+                                    .getElementById("unitSelect")
+                                    .appendChild(o);
+                            }
+                        } catch (e) {
+                            console.warn(
+                                "[Unit] status fetch for selected unit failed",
+                                e,
+                            );
+                        }
+                    }
+                    if (selectedUnitId)
+                        document.getElementById("unitSelect").value =
+                            String(selectedUnitId);
+
+                    _suppressSave = true;
+                    onUnitChange(); // paint badge + apply gating from restored/attached state
+                    _suppressSave = false;
+                } catch (e) {
+                    console.error("[Unit] init failed", e);
+                    setPaymentLocked(false); // fail open so existing deals stay usable
+                }
+                notifyResize();
+            }
+
+            // ── BX24 Init ─────────────────────────────────────────────────────────────────
+
+            BX24.init(function () {
+                const info = BX24.placement.info();
+                currentDealId =
+                    info && info.options
+                        ? info.options.ID || info.options.id || null
+                        : null;
+
+                if (currentDealId) {
+                    BX24.callMethod(
+                        "crm.deal.get",
+                        { id: currentDealId },
+                        function (result) {
+                            if (result.error()) {
+                                document.getElementById(
+                                    "saveIndicator",
+                                ).innerText = "Load error ✗";
+                                console.error(
+                                    "crm.deal.get error:",
+                                    result.error(),
+                                );
+                            } else {
+                                const dealData = result.data();
+                                if (dealData && dealData[STORAGE_FIELD_KEY]) {
+                                    populateFields(dealData[STORAGE_FIELD_KEY]);
+                                }
+                                document.getElementById(
+                                    "saveIndicator",
+                                ).innerText = "Ready ✓";
+                                notifyResize();
+                                initUnitSection(dealData); // load units, resolve stage, apply gating
+                            }
+                        },
+                    );
+                } else {
+                    document.getElementById("saveIndicator").innerText =
+                        "No Deal context.";
+                    console.warn("placement.info() returned no ID:", info);
+                }
+
+                notifyResize();
+            });
+
+            document.addEventListener("input", handleDataChange);
+            document.addEventListener("change", handleDataChange);
+
+            // Discount field: enforce the 15% cap and re-calculate the amount
+            document
+                .getElementById("discountPct")
+                .addEventListener("input", function () {
+                    enforceDiscountCap();
+                    scheduleRecalc();
+                });
+
+            // Custom Total Amount: re-calculate the deal amount as it's typed
+            document
+                .getElementById("totalAmount")
+                .addEventListener("input", scheduleRecalc);
+        </script>
+    </body>
 </html>
