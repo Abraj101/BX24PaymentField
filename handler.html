@@ -824,17 +824,22 @@
             async function fetchAllProductProperties() {
                 if (_propMapCache.all) return _propMapCache.all;
                 let all = [],
-                    start = 0,
+                    lastId = 0,
                     guard = 0;
-                while (guard++ < 6) {
+                while (guard++ < 200) {
                     const pdata = await callBX("catalog.productProperty.list", {
+                        order: { id: "ASC" },
+                        filter: { ">id": lastId },
                         select: ["id", "name", "iblockId"],
-                        start: start,
+                        start: -1, // skip the COUNT query; id-keyset pagination instead of offset
                     });
                     const batch = firstArray(pdata);
+                    if (!batch.length) break; // no more pages
                     all = all.concat(batch);
-                    if (batch.length < 50) break; // last page
-                    start += 50;
+                    lastId = Number(
+                        batch[batch.length - 1].id ||
+                            batch[batch.length - 1].ID,
+                    );
                 }
                 _propMapCache.all = all;
                 console.log(
@@ -1596,14 +1601,15 @@
                 await resolveStatusEnum();
                 await resolveCatalogIds();
                 let all = [],
-                    start = 0,
+                    lastId = 0,
                     guard = 0;
-                while (guard++ < 40) {
-                    const filter = {};
+                while (guard++ < 200) {
+                    const filter = { ">id": lastId }; // id-keyset cursor
                     if (UNIT_IBLOCK_ID) filter.iblockId = UNIT_IBLOCK_ID; // required by the method
                     if (UNIT_SECTION_ID)
                         filter.iblockSectionId = UNIT_SECTION_ID; // optional narrowing
                     const params = {
+                        order: { id: "ASC" },
                         select: [
                             "id",
                             "name",
@@ -1612,16 +1618,17 @@
                             "property" + UNIT_STATUS_PROP_ID,
                         ],
                         filter: filter,
-                        start: start,
+                        start: -1, // skip the COUNT query; avoids duplicate/skipped pages from offset drift
                     };
                     const data = await callBX("catalog.product.list", params);
                     const batch =
                         data && data.products
                             ? data.products
                             : firstArray(data);
+                    if (!batch.length) break; // no more pages
                     all = all.concat(batch);
-                    if (batch.length < 50) break;
-                    start += 50;
+                    const last = batch[batch.length - 1];
+                    lastId = Number(last.id || last.ID);
                 }
                 _unitCatalog = all.map(function (p) {
                     const raw = p["property" + UNIT_STATUS_PROP_ID];
