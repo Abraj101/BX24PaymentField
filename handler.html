@@ -930,7 +930,8 @@ function notifyResize() {
 // CONFIG — adjust here only if names/ids change in Bitrix.
 const UNIT_STATUS_PROP_ID = 99;                 // PROPERTY_99 (unit status list field)
 const UNIT_SECTION_NAME   = 'Dubai Inventory';  // catalog section holding the units
-let   UNIT_SECTION_ID      = null;              // auto-resolved; paste the id here to force it
+let   UNIT_SECTION_ID      = 53;                // Dubai Inventory section (resolved)
+let   UNIT_IBLOCK_ID       = 15;                // CRM Product Catalog iblock (resolved)
 const UNIT_PIPELINE_STAGE_BOOKING = 'Sales Booking';   // stage where a unit may be attached
 const ST_AVAILABLE = 'Available', ST_BOOKED = 'Booked', ST_SOLD = 'Sold', ST_RESERVED = 'Reserved';
 
@@ -976,48 +977,61 @@ function statusLabelFromRaw(raw) {
     return raw == null ? null : String(raw);
 }
 
-// Find the "Dubai Inventory" section id (best effort; override via UNIT_SECTION_ID)
-async function resolveUnitSection() {
-    if (UNIT_SECTION_ID) return UNIT_SECTION_ID;
+// Resolve the catalog iblockId (REQUIRED by catalog.product.list) and, if possible,
+// the "Dubai Inventory" section id. Override either via the CONFIG constants above.
+async function resolveCatalogIds() {
+    if (UNIT_IBLOCK_ID && (UNIT_SECTION_ID || UNIT_SECTION_ID === 0)) return;
     try {
         const cats = await callBX('catalog.catalog.list', {});
         const clist = (cats && cats.catalogs) ? cats.catalogs : firstArray(cats);
         let ids = [];
         clist.forEach(function(c) {
             ['iblockId', 'productIblockId', 'offerIblockId', 'IBLOCK_ID', 'id'].forEach(function(k) {
-                if (c[k] != null) ids.push(c[k]);
+                if (c[k] != null) ids.push(Number(c[k]));
             });
         });
         ids = ids.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+        // Try to locate the Dubai Inventory section within a candidate iblock.
         for (let i = 0; i < ids.length; i++) {
-            const secs = await callBX('catalog.section.list', {
-                filter: { iblockId: ids[i] }, select: ['id', 'name', 'iblockId']
-            });
-            const slist = (secs && secs.sections) ? secs.sections : firstArray(secs);
-            const m = slist.find(function(s) {
-                return String(s.name || s.NAME || '').toLowerCase()
-                    .indexOf(UNIT_SECTION_NAME.toLowerCase()) !== -1;
-            });
-            if (m) { UNIT_SECTION_ID = Number(m.id || m.ID); return UNIT_SECTION_ID; }
+            try {
+                const secs = await callBX('catalog.section.list', {
+                    select: ['id', 'name', 'iblockId'], filter: { iblockId: ids[i] }
+                });
+                const slist = (secs && secs.sections) ? secs.sections : firstArray(secs);
+                const m = slist.find(function(s) {
+                    return String(s.name || s.NAME || '').toLowerCase()
+                        .indexOf(UNIT_SECTION_NAME.toLowerCase()) !== -1;
+                });
+                if (m) {
+                    if (!UNIT_IBLOCK_ID)  UNIT_IBLOCK_ID  = ids[i];
+                    if (!UNIT_SECTION_ID) UNIT_SECTION_ID = Number(m.id || m.ID);
+                    return;
+                }
+            } catch (e) { /* try next iblock */ }
         }
+        // No section match — fall back to the first catalog iblock (lists all its products).
+        if (!UNIT_IBLOCK_ID && ids.length) UNIT_IBLOCK_ID = ids[0];
     } catch (e) {
-        console.warn('[Unit] section auto-resolve failed; listing all products. ' +
-            'Paste the section id into UNIT_SECTION_ID to restrict.', e);
+        console.warn('[Unit] catalog id auto-resolve failed. Set UNIT_IBLOCK_ID ' +
+            '(and optionally UNIT_SECTION_ID) at the top of the unit script.', e);
     }
-    return null;
 }
 
 // Load all units + their statuses (property99 comes back in the list response)
 async function loadUnits() {
     await resolveStatusEnum();
-    const sectionId = await resolveUnitSection();
+    await resolveCatalogIds();
     let all = [], start = 0, guard = 0;
     while (guard++ < 40) {
+        const filter = {};
+        if (UNIT_IBLOCK_ID)  filter.iblockId = UNIT_IBLOCK_ID;            // required by the method
+        if (UNIT_SECTION_ID) filter.iblockSectionId = UNIT_SECTION_ID;   // optional narrowing
         const params = {
             select: ['id', 'name', 'iblockSectionId', 'property' + UNIT_STATUS_PROP_ID],
+            filter: filter,
             start: start
         };
-        if (sectionId) params.filter = { iblockSectionId: sectionId };
         const data = await callBX('catalog.product.list', params);
         const batch = (data && data.products) ? data.products : firstArray(data);
         all = all.concat(batch);
