@@ -138,6 +138,36 @@
         .switch input:checked + .slider { background: #2fc6f6; }
         .switch input:checked + .slider:before { transform: translateX(20px); }
         .furnished-state { font-size: 12px; font-weight: 600; color: #8e99a4; min-width: 28px; text-align: right; }
+
+        /* ── Unit section ── */
+        .unit-section { padding: 12px 20px 4px; }
+        .unit-row { display: flex; gap: 12px; align-items: flex-end; }
+        .unit-picker { flex: 1; }
+        .unit-status-box { flex: 0 0 130px; display: flex; flex-direction: column; gap: 5px; }
+        .status-badge {
+            height: 36px; border-radius: 6px; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+            border: 1px solid transparent; text-transform: capitalize;
+        }
+        .status-badge.empty     { background: #f1f4f8; color: #9aa5b1; border-color: #e2e8f0; }
+        .status-badge.available { background: #e7f7ee; color: #1a9d54; border-color: #b6e6c9; }
+        .status-badge.reserved  { background: #eef2f7; color: #5b6b7c; border-color: #d6dee7; }
+        .status-badge.booked    { background: #fdeecf; color: #b7791f; border-color: #f2d9a8; }
+        .status-badge.sold      { background: #fdecea; color: #c62828; border-color: #f5c6c2; }
+        .unit-gate-msg {
+            font-size: 12px; font-weight: 600; padding: 8px 20px 2px;
+            display: none; line-height: 1.4;
+        }
+        .btn-attach {
+            display: none; margin: 10px 20px 0; height: 36px; padding: 0 18px;
+            border: none; border-radius: 6px; background: #2fc6f6; color: #fff;
+            font-weight: 700; font-size: 13px; cursor: pointer; transition: background 0.15s;
+        }
+        .btn-attach:hover { background: #1cb5e3; }
+        .btn-attach:disabled { background: #a0d8ef; cursor: not-allowed; }
+        #paymentBody { transition: opacity 0.15s; }
+        #paymentBody.locked { opacity: 0.45; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -147,6 +177,30 @@
         <span class="section-title">Payment Details</span>
         <span class="save-indicator" id="saveIndicator">Connecting...</span>
     </div>
+
+    <!-- ── Unit Selection (top of section) ── -->
+    <div class="unit-section">
+        <div class="unit-row">
+            <div class="field-group unit-picker">
+                <span class="field-label">Unit</span>
+                <div class="select-wrapper">
+                    <select class="bx-select" id="unitSelect" onchange="onUnitChange()">
+                        <option value="">— Select unit —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="unit-status-box">
+                <span class="field-label">Status</span>
+                <div class="status-badge empty" id="unitStatusBadge">—</div>
+            </div>
+        </div>
+    </div>
+    <button class="btn-attach" id="attachBtn" type="button" onclick="attachUnit()">Attach unit &amp; mark Booked</button>
+    <div class="unit-gate-msg" id="unitGateMsg"></div>
+    <div class="divider"></div>
+
+    <!-- ── Payment body (locked until a valid unit is chosen) ── -->
+    <div id="paymentBody">
 
     <!-- ── Row 1: Plan + Discount ── -->
     <div class="field-row">
@@ -331,6 +385,8 @@
             </div>
         </div>
     </div>
+
+    </div><!-- /paymentBody -->
 
 </div>
 
@@ -744,6 +800,10 @@ function collectData() {
         data.paymentDate = document.getElementById('paymentDate').value || '';
     }
 
+    // Selected unit (persists the picker choice across reloads)
+    data.unitId   = selectedUnitId   || '';
+    data.unitName = selectedUnitName  || '';
+
     return data;
 }
 
@@ -786,6 +846,12 @@ function populateFields(rawValue) {
     if (!rawValue) return;
     try {
         const data = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+
+        // Restore the saved unit selection (dropdown is populated later by initUnitSection)
+        if (data.unitId) {
+            selectedUnitId   = Number(data.unitId);
+            selectedUnitName = data.unitName || '';
+        }
 
         if (data.paymentPlan) {
             const p = data.paymentPlan;
@@ -859,6 +925,314 @@ function notifyResize() {
     if (window.BX24) BX24.fitWindow();
 }
 
+// ── Unit selection, status & gating ───────────────────────────────────────────
+//
+// CONFIG — adjust here only if names/ids change in Bitrix.
+const UNIT_STATUS_PROP_ID = 99;                 // PROPERTY_99 (unit status list field)
+const UNIT_SECTION_NAME   = 'Dubai Inventory';  // catalog section holding the units
+let   UNIT_SECTION_ID      = null;              // auto-resolved; paste the id here to force it
+const UNIT_PIPELINE_STAGE_BOOKING = 'Sales Booking';   // stage where a unit may be attached
+const ST_AVAILABLE = 'Available', ST_BOOKED = 'Booked', ST_SOLD = 'Sold', ST_RESERVED = 'Reserved';
+
+let _statusEnum      = null;   // { byId:{id:label}, byLabel:{label:id} }
+let _unitCatalog     = [];     // [{ id, name, status }]
+let _unitStatusById  = {};     // id -> status label
+let _currentStageName = '';
+let _isBookingStage   = false;
+let _attachedUnitId   = null;  // unit currently in THIS deal's product rows
+let selectedUnitId    = null;  // picker choice (persisted into the deal JSON)
+let selectedUnitName  = '';
+let _suppressSave     = false; // avoid autosave while restoring state on load
+
+// Resolve the four enum values of PROPERTY_99 → their value ids (needed to read/write)
+async function resolveStatusEnum() {
+    if (_statusEnum) return _statusEnum;
+    const data = await callBX('catalog.productPropertyEnum.list', {
+        select: ['id', 'propertyId', 'value'],
+        filter: { propertyId: UNIT_STATUS_PROP_ID }
+    });
+    const list = (data && data.productPropertyEnums) ? data.productPropertyEnums : firstArray(data);
+    const byId = {}, byLabel = {};
+    list.forEach(function(r) {
+        const id = Number(r.id || r.ID);
+        const val = String(r.value || r.VALUE || '');
+        byId[id] = val;
+        byLabel[val.toLowerCase()] = id;
+    });
+    _statusEnum = { byId: byId, byLabel: byLabel };
+    return _statusEnum;
+}
+
+// Turn a raw PROPERTY_99 value (id, {value}, or text) into its label
+function statusLabelFromRaw(raw) {
+    if (raw == null) return null;
+    if (Array.isArray(raw)) raw = raw[0];
+    if (raw && typeof raw === 'object') {
+        raw = (raw.value !== undefined ? raw.value
+             : raw.valueId !== undefined ? raw.valueId : raw.VALUE);
+    }
+    const n = Number(raw);
+    if (!isNaN(n) && _statusEnum && _statusEnum.byId[n]) return _statusEnum.byId[n];
+    return raw == null ? null : String(raw);
+}
+
+// Find the "Dubai Inventory" section id (best effort; override via UNIT_SECTION_ID)
+async function resolveUnitSection() {
+    if (UNIT_SECTION_ID) return UNIT_SECTION_ID;
+    try {
+        const cats = await callBX('catalog.catalog.list', {});
+        const clist = (cats && cats.catalogs) ? cats.catalogs : firstArray(cats);
+        let ids = [];
+        clist.forEach(function(c) {
+            ['iblockId', 'productIblockId', 'offerIblockId', 'IBLOCK_ID', 'id'].forEach(function(k) {
+                if (c[k] != null) ids.push(c[k]);
+            });
+        });
+        ids = ids.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        for (let i = 0; i < ids.length; i++) {
+            const secs = await callBX('catalog.section.list', {
+                filter: { iblockId: ids[i] }, select: ['id', 'name', 'iblockId']
+            });
+            const slist = (secs && secs.sections) ? secs.sections : firstArray(secs);
+            const m = slist.find(function(s) {
+                return String(s.name || s.NAME || '').toLowerCase()
+                    .indexOf(UNIT_SECTION_NAME.toLowerCase()) !== -1;
+            });
+            if (m) { UNIT_SECTION_ID = Number(m.id || m.ID); return UNIT_SECTION_ID; }
+        }
+    } catch (e) {
+        console.warn('[Unit] section auto-resolve failed; listing all products. ' +
+            'Paste the section id into UNIT_SECTION_ID to restrict.', e);
+    }
+    return null;
+}
+
+// Load all units + their statuses (property99 comes back in the list response)
+async function loadUnits() {
+    await resolveStatusEnum();
+    const sectionId = await resolveUnitSection();
+    let all = [], start = 0, guard = 0;
+    while (guard++ < 40) {
+        const params = {
+            select: ['id', 'name', 'iblockSectionId', 'property' + UNIT_STATUS_PROP_ID],
+            start: start
+        };
+        if (sectionId) params.filter = { iblockSectionId: sectionId };
+        const data = await callBX('catalog.product.list', params);
+        const batch = (data && data.products) ? data.products : firstArray(data);
+        all = all.concat(batch);
+        if (batch.length < 50) break;
+        start += 50;
+    }
+    _unitCatalog = all.map(function(p) {
+        const raw = p['property' + UNIT_STATUS_PROP_ID];
+        const status = statusLabelFromRaw(raw);
+        const rec = {
+            id: Number(p.id || p.ID),
+            name: String(p.name || p.NAME || ('#' + (p.id || p.ID))),
+            status: status
+        };
+        _unitStatusById[rec.id] = status;
+        return rec;
+    });
+    return _unitCatalog;
+}
+
+function populateUnitDropdown() {
+    const sel = document.getElementById('unitSelect');
+    sel.innerHTML = '<option value="">— Select unit —</option>';
+    _unitCatalog.slice().sort(function(a, b) { return a.name.localeCompare(b.name); })
+        .forEach(function(u) {
+            const o = document.createElement('option');
+            o.value = u.id;
+            o.textContent = u.name;
+            sel.appendChild(o);
+        });
+    if (selectedUnitId) sel.value = String(selectedUnitId);
+}
+
+function badgeClassFor(label) {
+    const l = (label || '').toLowerCase();
+    if (l === 'available') return 'available';
+    if (l === 'reserved')  return 'reserved';
+    if (l === 'booked')    return 'booked';
+    if (l === 'sold')      return 'sold';
+    return 'empty';
+}
+
+function setPaymentLocked(locked) {
+    const body = document.getElementById('paymentBody');
+    if (body) body.classList.toggle('locked', !!locked);
+}
+
+function showGateMsg(msg, isError) {
+    const el = document.getElementById('unitGateMsg');
+    el.textContent = msg || '';
+    el.style.color = isError ? '#c62828' : '#8e99a4';
+    el.style.display = msg ? 'block' : 'none';
+    notifyResize();
+}
+
+// Core gating: decide what to show/allow for the chosen unit
+function onUnitChange() {
+    const sel = document.getElementById('unitSelect');
+    const id = sel.value ? Number(sel.value) : null;
+    const badge = document.getElementById('unitStatusBadge');
+    const attachBtn = document.getElementById('attachBtn');
+    attachBtn.style.display = 'none';
+
+    if (!id) {
+        selectedUnitId = null; selectedUnitName = '';
+        badge.className = 'status-badge empty'; badge.textContent = '—';
+        setPaymentLocked(true);
+        showGateMsg('Select a unit to enter payment details.', false);
+        if (!_suppressSave) handleDataChange();
+        return;
+    }
+
+    selectedUnitId = id;
+    const opt = sel.options[sel.selectedIndex];
+    selectedUnitName = opt ? opt.textContent : '';
+    const status = _unitStatusById[id] || null;
+    badge.className = 'status-badge ' + badgeClassFor(status);
+    badge.textContent = status || '—';
+
+    const isOurs = (_attachedUnitId && Number(_attachedUnitId) === id);
+    const sl = (status || '').toLowerCase();
+
+    if (isOurs) {
+        // Unit already belongs to this deal → payments stay editable regardless of status
+        setPaymentLocked(false);
+        showGateMsg('', false);
+    } else if (sl === 'available') {
+        setPaymentLocked(false);
+        showGateMsg('', false);
+        if (_isBookingStage) {
+            attachBtn.style.display = 'block';
+            attachBtn.disabled = false;
+            attachBtn.textContent = 'Attach unit & mark Booked';
+        } else {
+            showGateMsg('Unit is available. It can be attached once the deal reaches "Sales Booking".', false);
+        }
+    } else if (sl === 'booked' || sl === 'sold') {
+        setPaymentLocked(true);
+        showGateMsg('This unit is ' + status + ' on another deal and cannot be used. Please choose an available unit.', true);
+    } else if (sl === 'reserved') {
+        setPaymentLocked(true);
+        showGateMsg('This unit is Reserved and cannot be used right now.', true);
+    } else {
+        setPaymentLocked(true);
+        showGateMsg('Unit status could not be read. Please choose another unit.', true);
+    }
+    if (!_suppressSave) handleDataChange();
+}
+
+// Attach the chosen available unit → backend books it (atomic re-check + product row + status)
+async function attachUnit() {
+    if (!currentDealId || !selectedUnitId) return;
+    const btn = document.getElementById('attachBtn');
+    btn.disabled = true; btn.textContent = 'Attaching…';
+    try {
+        const resp = await fetch(window.location.origin + '/book', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dealId: currentDealId, productId: selectedUnitId })
+        });
+        const out = await resp.json();
+        const badge = document.getElementById('unitStatusBadge');
+
+        if (out.ok) {
+            _attachedUnitId = selectedUnitId;
+            _unitStatusById[selectedUnitId] = ST_BOOKED;
+            badge.className = 'status-badge booked'; badge.textContent = ST_BOOKED;
+            btn.style.display = 'none';
+            setPaymentLocked(false);
+            showGateMsg('Unit attached and marked Booked.', false);
+            handleDataChange();
+            if (typeof scheduleRecalc === 'function') scheduleRecalc();
+        } else if (out.reason === 'not_available') {
+            _unitStatusById[selectedUnitId] = out.status;
+            badge.className = 'status-badge ' + badgeClassFor(out.status);
+            badge.textContent = out.status;
+            btn.style.display = 'none';
+            setPaymentLocked(true);
+            showGateMsg('This unit was just taken (now ' + out.status + '). Please choose another available unit.', true);
+        } else if (out.reason === 'wrong_stage') {
+            btn.disabled = false; btn.textContent = 'Attach unit & mark Booked';
+            showGateMsg('Units can only be attached at the "Sales Booking" stage.', true);
+        } else {
+            btn.disabled = false; btn.textContent = 'Retry attach';
+            showGateMsg('Could not attach the unit' + (out.error ? (': ' + out.error) : '') + '.', true);
+        }
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'Retry attach';
+        showGateMsg('Network error while attaching the unit. Please retry.', true);
+        console.error('[attachUnit]', e);
+    }
+    notifyResize();
+}
+
+// Resolve this deal's stage NAME so we know if it's "Sales Booking"
+async function resolveDealStage(dealData) {
+    try {
+        const catId = (dealData.CATEGORY_ID != null) ? dealData.CATEGORY_ID : 0;
+        const entityId = (String(catId) !== '0') ? ('DEAL_STAGE_' + catId) : 'DEAL_STAGE';
+        const stages = await callBX('crm.status.list', {
+            order: { SORT: 'ASC' }, filter: { ENTITY_ID: entityId }
+        });
+        const list = firstArray(stages);
+        const norm = function(s) { s = String(s || ''); const i = s.indexOf(':'); return i >= 0 ? s.slice(i + 1) : s; };
+        const cur = list.find(function(s) { return norm(s.STATUS_ID) === norm(dealData.STAGE_ID); });
+        _currentStageName = cur ? String(cur.NAME || '') : '';
+        _isBookingStage = _currentStageName.toLowerCase() === UNIT_PIPELINE_STAGE_BOOKING.toLowerCase();
+    } catch (e) {
+        console.warn('[Unit] stage resolve failed', e);
+        _isBookingStage = false;
+    }
+}
+
+// Called from BX24.init once the deal is loaded
+async function initUnitSection(dealData) {
+    try {
+        await resolveDealStage(dealData);
+        await loadUnits();
+        populateUnitDropdown();
+
+        // Which unit is currently attached to THIS deal (native product rows)?
+        try {
+            const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
+            const rows = firstArray(rowsData);
+            if (rows.length) _attachedUnitId = Number(rows[0].PRODUCT_ID || rows[0].productId);
+        } catch (e) { console.warn('[Unit] productrows.get failed', e); }
+
+        // Prefer the saved picker choice; fall back to the attached unit
+        if (selectedUnitId == null && _attachedUnitId) selectedUnitId = _attachedUnitId;
+
+        if (selectedUnitId && _unitStatusById[selectedUnitId] == null) {
+            // Selected unit wasn't in the section list — fetch its status directly
+            try {
+                const g = await callBX('catalog.product.get', { id: selectedUnitId });
+                const pr = (g && g.product) ? g.product : g;
+                _unitStatusById[selectedUnitId] = statusLabelFromRaw(pr['property' + UNIT_STATUS_PROP_ID]);
+                if (!document.querySelector('#unitSelect option[value="' + selectedUnitId + '"]')) {
+                    const o = document.createElement('option');
+                    o.value = selectedUnitId; o.textContent = selectedUnitName || ('#' + selectedUnitId);
+                    document.getElementById('unitSelect').appendChild(o);
+                }
+            } catch (e) { console.warn('[Unit] status fetch for selected unit failed', e); }
+        }
+        if (selectedUnitId) document.getElementById('unitSelect').value = String(selectedUnitId);
+
+        _suppressSave = true;
+        onUnitChange();          // paint badge + apply gating from restored/attached state
+        _suppressSave = false;
+    } catch (e) {
+        console.error('[Unit] init failed', e);
+        setPaymentLocked(false); // fail open so existing deals stay usable
+    }
+    notifyResize();
+}
+
 // ── BX24 Init ─────────────────────────────────────────────────────────────────
 
 BX24.init(function() {
@@ -879,6 +1253,7 @@ BX24.init(function() {
                 }
                 document.getElementById('saveIndicator').innerText = "Ready ✓";
                 notifyResize();
+                initUnitSection(dealData);   // load units, resolve stage, apply gating
             }
         });
     } else {

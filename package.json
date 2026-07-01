@@ -1,8 +1,11 @@
 {
   "name": "bitrix24-payment-section",
-  "version": "1.1.0",
-  "description": "Native Custom Payment Section Field for Bitrix24 on Dokploy",
+  "version": "1.2.0",
+  "description": "Native Custom Payment Section + Unit picker & stage-driven unit status for Bitrix24 on Dokploy",
   "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js"
   },
