@@ -363,6 +363,43 @@
                 opacity: 0.45;
                 pointer-events: none;
             }
+
+            /* ── Action Buttons ── */
+            .action-buttons-row {
+                display: flex;
+                gap: 12px;
+                margin: 10px 20px 0;
+            }
+            .btn-action {
+                display: none; /* Hidden by default, just like your original button */
+                height: 36px;
+                padding: 0 18px;
+                border-radius: 6px;
+                font-weight: 700;
+                font-size: 13px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .btn-attach {
+                background: #f1f4f8;
+                color: #535c69;
+                border: 1px solid #d4dae3;
+            }
+            .btn-attach:hover {
+                background: #e2e8f0;
+            }
+            .btn-booked {
+                background: #2fc6f6;
+                color: #fff;
+                border: none;
+            }
+            .btn-booked:hover {
+                background: #1cb5e3;
+            }
+            .btn-action:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
         </style>
     </head>
     <body>
@@ -397,14 +434,24 @@
                     </div>
                 </div>
             </div>
-            <button
-                class="btn-attach"
-                id="attachBtn"
-                type="button"
-                onclick="attachUnit()"
-            >
-                Attach unit &amp; mark Booked
-            </button>
+            <div class="action-buttons-row">
+                <button
+                    class="btn-action btn-attach"
+                    id="attachBtn"
+                    type="button"
+                    onclick="attachUnit()"
+                >
+                    Attach Unit
+                </button>
+                <button
+                    class="btn-action btn-booked"
+                    id="markBookedBtn"
+                    type="button"
+                    onclick="markBooked()"
+                >
+                    Mark Booked
+                </button>
+            </div>
             <div class="unit-gate-msg" id="unitGateMsg"></div>
             <div class="divider"></div>
 
