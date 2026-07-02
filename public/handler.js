@@ -979,7 +979,17 @@ async function attachUnit() {
     const rowsData = await callBX("crm.deal.productrows.get", {
       id: currentDealId,
     });
-    const rows = firstArray(rowsData);
+    let rows = firstArray(rowsData);
+
+    // A deal should only ever have ONE unit attached at a time. If a
+    // different unit was attached previously, drop that row before adding
+    // the newly selected one — this is what turns "attach" from an append
+    // into an overwrite when the user picks a different unit.
+    if (_attachedUnitId && Number(_attachedUnitId) !== Number(selectedUnitId)) {
+      rows = rows.filter(function (r) {
+        return Number(r.PRODUCT_ID || r.productId) !== Number(_attachedUnitId);
+      });
+    }
 
     const already = rows.some(function (r) {
       return Number(r.PRODUCT_ID || r.productId) === Number(selectedUnitId);
@@ -990,11 +1000,14 @@ async function attachUnit() {
         PRODUCT_ID: selectedUnitId,
         QUANTITY: 1,
       });
-      await callBX("crm.deal.productrows.set", {
-        id: currentDealId,
-        rows: rows,
-      });
     }
+
+    // Always write back — even if selectedUnitId was already present, this
+    // ensures a stale previous-unit row (if any) actually gets removed.
+    await callBX("crm.deal.productrows.set", {
+      id: currentDealId,
+      rows: rows,
+    });
 
     _attachedUnitId = selectedUnitId;
     handleDataChange();
