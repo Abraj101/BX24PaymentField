@@ -804,7 +804,7 @@ async function loadUnits() {
 
 function populateUnitDropdown() {
   const sel = document.getElementById("unitSelect");
-  sel.innerHTML = '<option value="">— Select unit —</option>';
+  sel.innerHTML = '<option value="">Loading...</option>';
   _unitCatalog
     .slice()
     .sort(function (a, b) {
