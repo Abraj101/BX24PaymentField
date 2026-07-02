@@ -656,6 +656,14 @@ function notifyResize() {
   if (window.BX24) BX24.fitWindow();
 }
 
+// Interpret a Bitrix boolean/checkbox UF value regardless of how it comes back
+// (string "Y"/"N", real boolean, or "1"/"0")
+function isTrueValue(v) {
+  return v === "Y" || v === true || v === "1" || v === 1;
+}
+
+let _formLocked = false; // true once booking is confirmed — blocks all further edits
+
 // ── Unit selection, status & gating ───────────────────────────────────────────
 //
 // CONFIG — adjust here only if names/ids change in Bitrix.
@@ -838,6 +846,28 @@ function setPaymentLocked(locked) {
   if (body) body.classList.toggle("locked", !!locked);
 }
 
+// Locks EVERYTHING once a booking is confirmed: the unit picker, both action
+// buttons, and the payment fields. Once locked, nothing in the widget is
+// editable — used both right after "Mark Booked" succeeds and on initial
+// render when the record already has BOOKING_CONFIRMED_FIELD_KEY = true.
+function lockEntireForm(locked, message) {
+  _formLocked = locked;
+  setPaymentLocked(locked);
+
+  const unitSelect = document.getElementById("unitSelect");
+  if (unitSelect) unitSelect.disabled = !!locked;
+
+  const attachBtn = document.getElementById("attachBtn");
+  const bookedBtn = document.getElementById("markBookedBtn");
+  if (locked) {
+    if (attachBtn) attachBtn.style.display = "none";
+    if (bookedBtn) bookedBtn.style.display = "none";
+  }
+
+  if (message !== undefined) showGateMsg(message, false);
+  notifyResize();
+}
+
 function showGateMsg(msg, isError) {
   const el = document.getElementById("unitGateMsg");
   el.textContent = msg || "";
@@ -853,6 +883,8 @@ function showGateMsg(msg, isError) {
 //   2. Attached to this deal, not yet Booked -> show "Mark Booked"
 //   3. Attached to this deal AND Booked      -> no buttons, payments unlocked
 function onUnitChange() {
+  if (_formLocked) return; // booking confirmed — no further changes allowed
+
   const sel = document.getElementById("unitSelect");
   const id = sel.value ? Number(sel.value) : null;
   const badge = document.getElementById("unitStatusBadge");
@@ -1009,9 +1041,6 @@ async function markBooked() {
       _unitStatusById[selectedUnitId] = ST_BOOKED;
       badge.className = "status-badge booked";
       badge.textContent = ST_BOOKED;
-      btn.style.display = "none";
-      setPaymentLocked(false);
-      showGateMsg("Unit marked Booked.", false);
       handleDataChange();
 
       // Flag the deal itself as confirmed-booked
@@ -1022,11 +1051,16 @@ async function markBooked() {
           id: currentDealId,
           fields: confirmFields,
         });
+        lockEntireForm(
+          true,
+          "Booking confirmed. This record is now locked and cannot be edited.",
+        );
       } catch (e) {
         console.error("[markBooked] booking-confirmed field update error:", e);
-        showGateMsg(
-          "Unit marked Booked, but the confirmation field failed to update (see console).",
+        // Status is booked either way — lock the form regardless, but flag the field issue
+        lockEntireForm(
           true,
+          "Unit marked Booked, but the confirmation field failed to update (see console). Record is locked.",
         );
       }
     } else {
@@ -1165,7 +1199,17 @@ BX24.init(function () {
         }
         document.getElementById("saveIndicator").innerText = "Ready ✓";
         notifyResize();
-        initUnitSection(dealData); // load units, resolve stage, apply gating
+        initUnitSection(dealData).then(function () {
+          // If this deal was already confirmed Booked in a previous session,
+          // lock the whole form immediately — overrides any gating state
+          // initUnitSection() just set up.
+          if (isTrueValue(dealData[BOOKING_CONFIRMED_FIELD_KEY])) {
+            lockEntireForm(
+              true,
+              "Booking confirmed. This record is locked and cannot be edited.",
+            );
+          }
+        });
       }
     });
   } else {
