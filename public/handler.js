@@ -915,18 +915,20 @@ async function attachUnit() {
   btn.disabled = true;
   btn.textContent = "Attaching…";
   try {
-    const resp = await fetch(window.location.origin + "/book", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dealId: currentDealId,
-        productId: selectedUnitId,
-      }),
-    });
+    const resp = await fetch(
+      "https://bx24paymentfieldbackend.premierchoiceint.online/updateProduct",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: String(selectedUnitId),
+        }),
+      },
+    );
     const out = await resp.json();
     const badge = document.getElementById("unitStatusBadge");
 
-    if (out.ok) {
+    if (out.success) {
       _attachedUnitId = selectedUnitId;
       _unitStatusById[selectedUnitId] = ST_BOOKED;
       badge.className = "status-badge booked";
@@ -936,30 +938,13 @@ async function attachUnit() {
       showGateMsg("Unit attached and marked Booked.", false);
       handleDataChange();
       if (typeof scheduleRecalc === "function") scheduleRecalc();
-    } else if (out.reason === "not_available") {
-      _unitStatusById[selectedUnitId] = out.status;
-      badge.className = "status-badge " + badgeClassFor(out.status);
-      badge.textContent = out.status;
-      btn.style.display = "none";
-      setPaymentLocked(true);
-      showGateMsg(
-        "This unit was just taken (now " +
-          out.status +
-          "). Please choose another available unit.",
-        true,
-      );
-    } else if (out.reason === "wrong_stage") {
-      btn.disabled = false;
-      btn.textContent = "Attach unit & mark Booked";
-      showGateMsg(
-        'Units can only be attached at the "Sales Booking" stage.',
-        true,
-      );
     } else {
       btn.disabled = false;
       btn.textContent = "Retry attach";
       showGateMsg(
-        "Could not attach the unit" + (out.error ? ": " + out.error : "") + ".",
+        "Could not attach the unit" +
+          (out.message ? ": " + out.message : "") +
+          ".",
         true,
       );
     }
