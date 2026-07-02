@@ -159,28 +159,28 @@ async function getUnitStatusLabel(productId) {
   return String(raw);
 }
 
-async function setUnitStatus(productId, label) {
-  const en = await getStatusEnum();
-  const enumId = en.byLabel[String(label).toLowerCase()];
-  if (!enumId) {
-    throw new Error(
-      'Status "' +
-        label +
-        '" not in PROPERTY_' +
-        STATUS_PROPERTY_ID +
-        " enum (found: " +
-        Object.keys(en.byLabel).join(", ") +
-        ")",
-    );
-  }
-  const fields = {};
-  fields["property" + STATUS_PROPERTY_ID] = enumId;
-  await callWebhook("catalog.product.update", {
-    id: productId,
-    fields: fields,
-  });
-  return enumId;
-}
+// async function setUnitStatus(productId, label) {
+//   const en = await getStatusEnum();
+//   const enumId = en.byLabel[String(label).toLowerCase()];
+//   if (!enumId) {
+//     throw new Error(
+//       'Status "' +
+//         label +
+//         '" not in PROPERTY_' +
+//         STATUS_PROPERTY_ID +
+//         " enum (found: " +
+//         Object.keys(en.byLabel).join(", ") +
+//         ")",
+//     );
+//   }
+//   const fields = {};
+//   fields["property" + STATUS_PROPERTY_ID] = enumId;
+//   await callWebhook("catalog.product.update", {
+//     id: productId,
+//     fields: fields,
+//   });
+//   return enumId;
+// }
 
 // ── Route: attach + book (called by the widget's "Attach" button) ─────────────
 app.post("/book", async (req, res) => {
@@ -214,7 +214,7 @@ app.post("/book", async (req, res) => {
     });
 
     // 4) flip status → Booked
-    await setUnitStatus(productId, ST_BOOKED);
+    // await setUnitStatus(productId, ST_BOOKED);
 
     return res.json({ ok: true, status: ST_BOOKED });
   } catch (e) {
@@ -279,7 +279,7 @@ async function processDealEvent(body) {
   if (!target) return;
   if (curLabel === target.toLowerCase()) return; // idempotent
 
-  await setUnitStatus(productId, target);
+  // await setUnitStatus(productId, target);
   console.log(
     "[/event] deal " +
       dealId +
