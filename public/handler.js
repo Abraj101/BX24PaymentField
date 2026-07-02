@@ -883,8 +883,6 @@ function showGateMsg(msg, isError) {
 //   2. Attached to this deal, not yet Booked -> show "Mark Booked"
 //   3. Attached to this deal AND Booked      -> no buttons, payments unlocked
 function onUnitChange() {
-  if (_formLocked) return; // booking confirmed — no further changes allowed
-
   const sel = document.getElementById("unitSelect");
   const id = sel.value ? Number(sel.value) : null;
   const badge = document.getElementById("unitStatusBadge");
@@ -904,8 +902,10 @@ function onUnitChange() {
     selectedUnitName = "";
     badge.className = "status-badge empty";
     badge.textContent = "—";
-    setPaymentLocked(true);
-    showGateMsg("Select a unit to enter payment details.", false);
+    if (!_formLocked) {
+      setPaymentLocked(true);
+      showGateMsg("Select a unit to enter payment details.", false);
+    }
     if (!_suppressSave) handleDataChange();
     return;
   }
@@ -916,6 +916,13 @@ function onUnitChange() {
   const status = _unitStatusById[id] || null;
   badge.className = "status-badge " + badgeClassFor(status);
   badge.textContent = status || "—";
+
+  // Booking already confirmed — badge/value are painted above, but skip all
+  // gating logic entirely so neither button can be revealed.
+  if (_formLocked) {
+    if (!_suppressSave) handleDataChange();
+    return;
+  }
 
   const isOurs = _attachedUnitId && Number(_attachedUnitId) === id;
   const sl = (status || "").toLowerCase();
@@ -976,37 +983,20 @@ async function attachUnit() {
   btn.disabled = true;
   btn.textContent = "Attaching…";
   try {
-    const rowsData = await callBX("crm.deal.productrows.get", {
-      id: currentDealId,
-    });
-    let rows = firstArray(rowsData);
-
-    // A deal should only ever have ONE unit attached at a time. If a
-    // different unit was attached previously, drop that row before adding
-    // the newly selected one — this is what turns "attach" from an append
-    // into an overwrite when the user picks a different unit.
-    if (_attachedUnitId && Number(_attachedUnitId) !== Number(selectedUnitId)) {
-      rows = rows.filter(function (r) {
-        return Number(r.PRODUCT_ID || r.productId) !== Number(_attachedUnitId);
-      });
-    }
-
-    const already = rows.some(function (r) {
-      return Number(r.PRODUCT_ID || r.productId) === Number(selectedUnitId);
-    });
-
-    if (!already) {
-      rows.push({
-        PRODUCT_ID: selectedUnitId,
-        QUANTITY: 1,
-      });
-    }
-
-    // Always write back — even if selectedUnitId was already present, this
-    // ensures a stale previous-unit row (if any) actually gets removed.
+    // This widget enforces "exactly one unit product row per deal". Rather
+    // than trying to remove just the row we think is currently attached
+    // (which breaks if the deal ever picked up a stray extra row from
+    // elsewhere), we replace the ENTIRE product-rows array with just the
+    // newly selected unit. This also self-heals any deal that already has
+    // leftover/duplicate rows from before this fix.
     await callBX("crm.deal.productrows.set", {
       id: currentDealId,
-      rows: rows,
+      rows: [
+        {
+          PRODUCT_ID: selectedUnitId,
+          QUANTITY: 1,
+        },
+      ],
     });
 
     _attachedUnitId = selectedUnitId;
@@ -1138,7 +1128,7 @@ async function initUnitSection(dealData) {
 
     await loadUnits();
     populateUnitDropdown();
-    sel.disabled = false;
+    sel.disabled = _formLocked; // preserve an earlier lock instead of always re-enabling
 
     // Which unit is currently attached to THIS deal (native product rows)?
     try {
@@ -1148,6 +1138,16 @@ async function initUnitSection(dealData) {
       const rows = firstArray(rowsData);
       if (rows.length)
         _attachedUnitId = Number(rows[0].PRODUCT_ID || rows[0].productId);
+      if (rows.length > 1) {
+        console.warn(
+          "[Unit] deal " +
+            currentDealId +
+            " has " +
+            rows.length +
+            " product rows — only the first is tracked as the attached unit. " +
+            "Clicking Attach will replace ALL of them with just the selected unit.",
+        );
+      }
     } catch (e) {
       console.warn("[Unit] productrows.get failed", e);
     }
@@ -1211,18 +1211,21 @@ BX24.init(function () {
           populateFields(dealData[STORAGE_FIELD_KEY]);
         }
         document.getElementById("saveIndicator").innerText = "Ready ✓";
+
+        // Lock immediately if this deal was already confirmed Booked —
+        // don't wait on the unit-loading round trip (loadUnits/backend fetch)
+        // before applying the lock. initUnitSection() still runs afterward
+        // to populate the dropdown/badge for display, but it respects
+        // _formLocked and won't re-enable anything.
+        if (isTrueValue(dealData[BOOKING_CONFIRMED_FIELD_KEY])) {
+          lockEntireForm(
+            true,
+            "Booking confirmed. This record is locked and cannot be edited.",
+          );
+        }
+
         notifyResize();
-        initUnitSection(dealData).then(function () {
-          // If this deal was already confirmed Booked in a previous session,
-          // lock the whole form immediately — overrides any gating state
-          // initUnitSection() just set up.
-          if (isTrueValue(dealData[BOOKING_CONFIRMED_FIELD_KEY])) {
-            lockEntireForm(
-              true,
-              "Booking confirmed. This record is locked and cannot be edited.",
-            );
-          }
-        });
+        initUnitSection(dealData); // load units, resolve stage, apply gating
       }
     });
   } else {
