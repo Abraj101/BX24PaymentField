@@ -841,13 +841,26 @@ function showGateMsg(msg, isError) {
   notifyResize();
 }
 
-// Core gating: decide what to show/allow for the chosen unit
+// Core gating: decide what to show/allow for the chosen unit.
+//
+// Three distinct states now drive the UI:
+//   1. Not attached to this deal            -> show "Attach Unit" (if available + Booking stage)
+//   2. Attached to this deal, not yet Booked -> show "Mark Booked"
+//   3. Attached to this deal AND Booked      -> no buttons, payments unlocked
 function onUnitChange() {
   const sel = document.getElementById("unitSelect");
   const id = sel.value ? Number(sel.value) : null;
   const badge = document.getElementById("unitStatusBadge");
   const attachBtn = document.getElementById("attachBtn");
+  const bookedBtn = document.getElementById("markBookedBtn");
+
+  // Reset both buttons to their default state before re-evaluating
   attachBtn.style.display = "none";
+  attachBtn.disabled = false;
+  attachBtn.textContent = "Attach Unit";
+  bookedBtn.style.display = "none";
+  bookedBtn.disabled = false;
+  bookedBtn.textContent = "Mark Booked";
 
   if (!id) {
     selectedUnitId = null;
@@ -870,17 +883,23 @@ function onUnitChange() {
   const isOurs = _attachedUnitId && Number(_attachedUnitId) === id;
   const sl = (status || "").toLowerCase();
 
-  if (isOurs) {
-    // Unit already belongs to this deal → payments stay editable regardless of status
+  if (isOurs && sl === "booked") {
+    // Fully attached AND booked — payments unlocked, no action needed
     setPaymentLocked(false);
     showGateMsg("", false);
+  } else if (isOurs) {
+    // Attached to this deal but the status hasn't been flipped to Booked yet
+    setPaymentLocked(false);
+    showGateMsg(
+      'Unit attached. Click "Mark Booked" to lock the status.',
+      false,
+    );
+    bookedBtn.style.display = "block";
   } else if (sl === "available") {
     setPaymentLocked(false);
     showGateMsg("", false);
     if (_isBookingStage) {
       attachBtn.style.display = "block";
-      attachBtn.disabled = false;
-      attachBtn.textContent = "Attach unit & mark Booked";
     } else {
       showGateMsg(
         'Unit is available. It can be attached once the deal reaches "Sales Booking".',
@@ -908,12 +927,65 @@ function onUnitChange() {
   if (!_suppressSave) handleDataChange();
 }
 
-// Attach the chosen available unit → backend books it (atomic re-check + product row + status)
+// Step 1: Attach the chosen unit to this deal's product rows.
+// This ONLY adds the product row — it does NOT touch the catalog status.
+// NOTE: because this no longer calls the backend's atomic /updateProduct
+// check, two deals could theoretically attach the same "Available" unit
+// before either calls Mark Booked. If that matters for your workflow,
+// add a server-side guard (or re-check status here) before allowing attach.
 async function attachUnit() {
   if (!currentDealId || !selectedUnitId) return;
   const btn = document.getElementById("attachBtn");
   btn.disabled = true;
   btn.textContent = "Attaching…";
+  try {
+    const rowsData = await callBX("crm.deal.productrows.get", {
+      id: currentDealId,
+    });
+    const rows = firstArray(rowsData);
+
+    const already = rows.some(function (r) {
+      return Number(r.PRODUCT_ID || r.productId) === Number(selectedUnitId);
+    });
+
+    if (!already) {
+      rows.push({
+        PRODUCT_ID: selectedUnitId,
+        QUANTITY: 1,
+      });
+      await callBX("crm.deal.productrows.set", {
+        id: currentDealId,
+        rows: rows,
+      });
+    }
+
+    _attachedUnitId = selectedUnitId;
+    handleDataChange();
+    if (typeof scheduleRecalc === "function") scheduleRecalc();
+
+    // Re-run gating so the Mark Booked button now appears
+    onUnitChange();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Attach Unit";
+    showGateMsg("Could not attach the unit. Please retry.", true);
+    console.error("[attachUnit]", e);
+  }
+  notifyResize();
+}
+
+// Step 2: Mark the already-attached unit as Booked.
+// Calls the backend so the Available → Booked flip is authoritative/atomic
+// server-side (re-checked against other deals) rather than trusted from the client.
+async function markBooked() {
+  if (!currentDealId || !selectedUnitId) return;
+  if (!_attachedUnitId || Number(_attachedUnitId) !== Number(selectedUnitId)) {
+    showGateMsg("Attach the unit to this deal before marking it Booked.", true);
+    return;
+  }
+  const btn = document.getElementById("markBookedBtn");
+  btn.disabled = true;
+  btn.textContent = "Marking Booked…";
   try {
     const resp = await fetch(
       "https://bx24paymentfieldbackend.premierchoiceint.online/updateProduct",
@@ -929,20 +1001,18 @@ async function attachUnit() {
     const badge = document.getElementById("unitStatusBadge");
 
     if (out.success) {
-      _attachedUnitId = selectedUnitId;
       _unitStatusById[selectedUnitId] = ST_BOOKED;
       badge.className = "status-badge booked";
       badge.textContent = ST_BOOKED;
       btn.style.display = "none";
       setPaymentLocked(false);
-      showGateMsg("Unit attached and marked Booked.", false);
+      showGateMsg("Unit marked Booked.", false);
       handleDataChange();
-      if (typeof scheduleRecalc === "function") scheduleRecalc();
     } else {
       btn.disabled = false;
-      btn.textContent = "Retry attach";
+      btn.textContent = "Mark Booked";
       showGateMsg(
-        "Could not attach the unit" +
+        "Could not mark the unit Booked" +
           (out.message ? ": " + out.message : "") +
           ".",
         true,
@@ -950,9 +1020,12 @@ async function attachUnit() {
     }
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = "Retry attach";
-    showGateMsg("Network error while attaching the unit. Please retry.", true);
-    console.error("[attachUnit]", e);
+    btn.textContent = "Mark Booked";
+    showGateMsg(
+      "Network error while marking the unit Booked. Please retry.",
+      true,
+    );
+    console.error("[markBooked]", e);
   }
   notifyResize();
 }
@@ -1091,7 +1164,6 @@ document.getElementById("discountPct").addEventListener("input", function () {
   scheduleRecalc();
 });
 
-// Custom Total Amount: re-calculate the deal amount as it's typed
 document
   .getElementById("totalAmount")
   .addEventListener("input", scheduleRecalc);
