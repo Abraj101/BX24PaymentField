@@ -773,42 +773,27 @@ async function resolveCatalogIds() {
   }
 }
 
-// Load all units + their statuses (property99 comes back in the list response)
+// Load all units from the custom backend (replaces the direct catalog.product.list call)
 async function loadUnits() {
   await resolveStatusEnum();
-  await resolveCatalogIds();
-  let all = [],
-    lastId = 0,
-    guard = 0;
-  while (guard++ < 200) {
-    const filter = { ">id": lastId }; // id-keyset cursor
-    if (UNIT_IBLOCK_ID) filter.iblockId = UNIT_IBLOCK_ID; // required by the method
-    if (UNIT_SECTION_ID) filter.iblockSectionId = UNIT_SECTION_ID; // optional narrowing
-    const params = {
-      order: { id: "ASC" },
-      select: [
-        "id",
-        "name",
-        "iblockId",
-        "iblockSectionId",
-        "property" + UNIT_STATUS_PROP_ID,
-      ],
-      filter: filter,
-      start: -1, // skip the COUNT query; avoids duplicate/skipped pages from offset drift
-    };
-    const data = await callBX("catalog.product.list", params);
-    const batch = data && data.products ? data.products : firstArray(data);
-    if (!batch.length) break; // no more pages
-    all = all.concat(batch);
-    const last = batch[batch.length - 1];
-    lastId = Number(last.id || last.ID);
+
+  const resp = await fetch(
+    "https://bx24paymentfieldbackend.premierchoiceint.online/getAllProducts",
+  );
+  if (!resp.ok) {
+    throw new Error("Failed to fetch units: " + resp.status);
   }
+  const out = await resp.json();
+  const all = Array.isArray(out) ? out : out.data || [];
+
   _unitCatalog = all.map(function (p) {
-    const raw = p["property" + UNIT_STATUS_PROP_ID];
+    const raw =
+      p["PROPERTY_" + UNIT_STATUS_PROP_ID] ??
+      p["property" + UNIT_STATUS_PROP_ID];
     const status = statusLabelFromRaw(raw);
     const rec = {
-      id: Number(p.id || p.ID),
-      name: String(p.name || p.NAME || "#" + (p.id || p.ID)),
+      id: Number(p.ID ?? p.id),
+      name: String(p.NAME ?? p.name ?? "#" + (p.ID ?? p.id)),
       status: status,
     };
     _unitStatusById[rec.id] = status;
