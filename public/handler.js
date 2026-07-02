@@ -990,8 +990,14 @@ async function resolveDealStage(dealData) {
 async function initUnitSection(dealData) {
   try {
     await resolveDealStage(dealData);
+
+    const sel = document.getElementById("unitSelect");
+    sel.innerHTML = '<option value="">Loading...</option>';
+    sel.disabled = true;
+
     await loadUnits();
     populateUnitDropdown();
+    sel.disabled = false;
 
     // Which unit is currently attached to THIS deal (native product rows)?
     try {
