@@ -13,6 +13,11 @@ function planEnumValue(plan) {
   return PLAN_ENUM.standard;
 }
 
+// Set to "Y" once the unit is confirmed Booked (see markBooked()).
+// NOTE: verify via crm.deal.fields that this is a boolean/checkbox field —
+// those store "Y"/"N" strings, not JS true/false.
+const BOOKING_CONFIRMED_FIELD_KEY = "UF_CRM_1783017390988";
+
 // Visible "Payment Plan" dropdown on the General tab — mirrors the exact plan chosen here
 const PLAN_LIST_FIELD_KEY = "UF_CRM_1782057587352";
 const PLAN_LIST_ENUM = {
@@ -1008,6 +1013,22 @@ async function markBooked() {
       setPaymentLocked(false);
       showGateMsg("Unit marked Booked.", false);
       handleDataChange();
+
+      // Flag the deal itself as confirmed-booked
+      try {
+        const confirmFields = {};
+        confirmFields[BOOKING_CONFIRMED_FIELD_KEY] = "Y";
+        await callBX("crm.deal.update", {
+          id: currentDealId,
+          fields: confirmFields,
+        });
+      } catch (e) {
+        console.error("[markBooked] booking-confirmed field update error:", e);
+        showGateMsg(
+          "Unit marked Booked, but the confirmation field failed to update (see console).",
+          true,
+        );
+      }
     } else {
       btn.disabled = false;
       btn.textContent = "Mark Booked";
@@ -1164,6 +1185,7 @@ document.getElementById("discountPct").addEventListener("input", function () {
   scheduleRecalc();
 });
 
+// Custom Total Amount: re-calculate the deal amount as it's typed
 document
   .getElementById("totalAmount")
   .addEventListener("input", scheduleRecalc);
