@@ -438,6 +438,7 @@ function onPlanChange() {
 
 function collectData() {
   const plan = document.getElementById("paymentPlan").value;
+  console.log("[DEBUG] collectData: plan =", plan);
 
   // Balloon payments apply to Custom plans only
   const balloons = [];
@@ -522,10 +523,12 @@ function handleDataChange() {
 
     document.getElementById("saveIndicator").innerText = "Saving...";
     const data = collectData();
+    console.log("[DEBUG] collectData() ->", data);
     const payload = {};
     payload[STORAGE_FIELD_KEY] = JSON.stringify(data);
     payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
     payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(data.paymentPlan);
+    console.log("[DEBUG] payload being sent to crm.deal.update ->", payload);
 
     BX24.callMethod(
       "crm.deal.update",
