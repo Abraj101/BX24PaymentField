@@ -523,28 +523,33 @@ function handleDataChange() {
 
     document.getElementById("saveIndicator").innerText = "Saving...";
     const data = collectData();
-    console.log("[DEBUG] collectData() ->", data);
     const payload = {};
     payload[STORAGE_FIELD_KEY] = JSON.stringify(data);
     payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
     payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(data.paymentPlan);
-    console.log("[DEBUG] payload being sent to crm.deal.update ->", payload);
 
-    BX24.callMethod(
-      "crm.deal.update",
-      {
-        id: currentDealId,
-        fields: payload,
-      },
-      function (result) {
-        if (result.error()) {
-          document.getElementById("saveIndicator").innerText = "Save failed ✗";
-          console.error("crm.deal.update error:", result.error());
-        } else {
+    fetch("https://bx24paymentfieldbackend.premierchoiceint.online/updateDeal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealId: currentDealId, fields: payload }),
+    })
+      .then(function (r) {
+        return r.json().then(function (out) {
+          return { ok: r.ok, out: out };
+        });
+      })
+      .then(function (res) {
+        if (res.ok) {
           document.getElementById("saveIndicator").innerText = "Saved ✓";
+        } else {
+          document.getElementById("saveIndicator").innerText = "Save failed ✗";
+          console.error("[updateDeal] backend error:", res.out);
         }
-      },
-    );
+      })
+      .catch(function (e) {
+        document.getElementById("saveIndicator").innerText = "Save failed ✗";
+        console.error("[updateDeal] network error:", e);
+      });
   }, 700);
 }
 
