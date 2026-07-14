@@ -578,6 +578,7 @@ function populateFields(rawValue) {
       document
         .getElementById("fullPaymentBlock")
         .classList.toggle("visible", p === "full_payment");
+        document.getElementById("balloonSection").style.display = (p === "custom") ? "" : "none";
     }
 
     if (data.discountPct)
