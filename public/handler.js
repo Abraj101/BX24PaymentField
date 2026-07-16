@@ -399,7 +399,7 @@ const CUSTOM_FIELDS = [
   "phPayments",
   "phStartDate",
 ];
-const CUSTOM2_FIELDS = ["totalAmount2"];
+const CUSTOM2_FIELDS = ["custom02TotalAmount"];
 const INSTALLMENT_FIELDS = ["downpaymentStartDate"];
 const FULLPAYMENT_FIELDS = ["paymentDate"];
 
@@ -418,6 +418,9 @@ function onPlanChange() {
   const isFull = plan === "full_payment";
 
   document.getElementById("customBlock").classList.toggle("visible", isCustom);
+  document
+    .getElementById("custom02Block")
+    .classList.toggle("visible", isCustom02);
   document
     .getElementById("installmentBlock")
     .classList.toggle("visible", isInstallment);
@@ -585,7 +588,7 @@ function populateFields(rawValue) {
         .getElementById("customBlock")
         .classList.toggle("visible", p === "custom");
       document
-        .getElementById("custom2Block")
+        .getElementById("custom02Block")
         .classList.toggle("visible", p === "custom-2");
       document
         .getElementById("installmentBlock")
@@ -1276,5 +1279,5 @@ document
   .addEventListener("input", scheduleRecalc);
 
 document
-  .getElementById("totalAmount2")
+  .getElementById("custom02TotalAmount")
   .addEventListener("input", scheduleRecalc);
