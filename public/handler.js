@@ -385,7 +385,7 @@ function addCustom02Row(type, pct, amount, date) {
   row.id = `custom02Row_${idx}`;
   row.innerHTML = `
 <div class="select-wrapper">
-  <select class="bx-select" data-c2="type">
+  <select class="bx-select" data-c2="type" onchange="renumberCustom02Installments()">
     <option value="down_payment"${type === "down_payment" ? " selected" : ""}>Down Payment</option>
     <option value="installment"${type === "installment" ? " selected" : ""}>Installment</option>
     <option value="balloon_payment"${type === "balloon_payment" ? " selected" : ""}>Balloon Payment</option>
@@ -398,6 +398,7 @@ function addCustom02Row(type, pct, amount, date) {
 `;
   document.getElementById("custom02Rows").appendChild(row);
   syncCustom02RowCountField();
+  renumberCustom02Installments();
   notifyResize();
   handleDataChange();
 }
@@ -411,6 +412,7 @@ function removeCustom02Row(idx) {
   if (empty) empty.style.display = remaining.length === 0 ? "block" : "none";
 
   syncCustom02RowCountField();
+  renumberCustom02Installments();
   notifyResize();
   handleDataChange();
 }
@@ -428,6 +430,34 @@ function syncCustom02RowCountField() {
   const count = document.querySelectorAll("#custom02Rows .custom02-row").length;
   const field = document.getElementById("custom02RowCount");
   if (field) field.value = count;
+}
+
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function renumberCustom02Installments() {
+  const rows = Array.from(
+    document.querySelectorAll("#custom02Rows .custom02-row"),
+  );
+  const installmentCount = rows.filter(function (r) {
+    return r.querySelector('[data-c2="type"]').value === "installment";
+  }).length;
+
+  let running = 0;
+  rows.forEach(function (row) {
+    const select = row.querySelector('[data-c2="type"]');
+    const opt = select.querySelector('option[value="installment"]');
+    if (!opt) return;
+    if (select.value === "installment") {
+      running++;
+      opt.textContent = ordinal(running) + " Installment";
+    } else {
+      opt.textContent = ordinal(installmentCount + 1) + " Installment";
+    }
+  });
 }
 
 // Typing a number directly into "Number of Rows" adds/removes rows to match
