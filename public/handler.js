@@ -397,6 +397,7 @@ function addCustom02Row(type, pct, amount, date) {
 <input type="date" class="bx-input" data-c2="date" value="${escapeHtml(date || "")}">
 <button class="btn-remove-row" onclick="removeCustom02Row(${idx})" type="button" title="Remove">&times;</button>
 `;
+  row.dataset.c2Source = amount && !pct ? "amount" : "pct";
   document.getElementById("custom02Rows").appendChild(row);
   syncCustom02RowCountField();
   renumberCustom02Installments();
@@ -431,6 +432,66 @@ function syncCustom02RowCountField() {
   const count = document.querySelectorAll("#custom02Rows .custom02-row").length;
   const field = document.getElementById("custom02RowCount");
   if (field) field.value = count;
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function getCustom02Total() {
+  const el = document.getElementById("custom02TotalAmount");
+  const v = parseFloat(
+    String((el && el.value) || "").replace(/[^0-9.\-]/g, ""),
+  );
+  return isNaN(v) ? 0 : v;
+}
+
+// Typing a % -> fills in that row's Amount, based on the Total Amount above
+function onCustom02PctInput(input) {
+  const row = input.closest(".custom02-row");
+  if (!row) return;
+  row.dataset.c2Source = "pct";
+  const total = getCustom02Total();
+  const pct = parseFloat(input.value);
+  const amountInput = row.querySelector('[data-c2="amount"]');
+  if (total > 0 && !isNaN(pct)) {
+    amountInput.value = round2((total * pct) / 100);
+  }
+}
+
+// Typing an Amount -> fills in that row's %, based on the Total Amount above
+function onCustom02AmountInput(input) {
+  const row = input.closest(".custom02-row");
+  if (!row) return;
+  row.dataset.c2Source = "amount";
+  const total = getCustom02Total();
+  const amt = parseFloat(input.value);
+  const pctInput = row.querySelector('[data-c2="pct"]');
+  if (total > 0 && !isNaN(amt)) {
+    pctInput.value = round2((amt / total) * 100);
+  }
+}
+
+// If Total Amount changes after rows already have values, recompute every row
+// from whichever field the user typed into last (tracked via c2Source).
+function recalcCustom02RowsFromTotal() {
+  const total = getCustom02Total();
+  document
+    .querySelectorAll("#custom02Rows .custom02-row")
+    .forEach(function (row) {
+      const source = row.dataset.c2Source || "pct";
+      const pctInput = row.querySelector('[data-c2="pct"]');
+      const amountInput = row.querySelector('[data-c2="amount"]');
+      if (source === "amount") {
+        const amt = parseFloat(amountInput.value);
+        if (total > 0 && !isNaN(amt))
+          pctInput.value = round2((amt / total) * 100);
+      } else {
+        const pct = parseFloat(pctInput.value);
+        if (total > 0 && !isNaN(pct))
+          amountInput.value = round2((total * pct) / 100);
+      }
+    });
 }
 
 function ordinal(n) {
@@ -1427,3 +1488,7 @@ document
 document
   .getElementById("custom02TotalAmount")
   .addEventListener("input", scheduleRecalc);
+
+document
+  .getElementById("custom02TotalAmount")
+  .addEventListener("input", recalcCustom02RowsFromTotal);
