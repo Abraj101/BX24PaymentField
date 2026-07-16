@@ -386,6 +386,7 @@ function addCustom02Row(type, pct, amount, date) {
   row.innerHTML = `
 <div class="select-wrapper">
   <select class="bx-select" data-c2="type" onchange="renumberCustom02Installments()">
+      <option value=""${!type ? " selected" : ""}>Select</option>
     <option value="down_payment"${type === "down_payment" ? " selected" : ""}>Down Payment</option>
     <option value="installment"${type === "installment" ? " selected" : ""}>Installment</option>
     <option value="balloon_payment"${type === "balloon_payment" ? " selected" : ""}>Balloon Payment</option>
