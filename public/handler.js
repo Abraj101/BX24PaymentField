@@ -392,8 +392,8 @@ function addCustom02Row(type, pct, amount, date) {
     <option value="balloon_payment"${type === "balloon_payment" ? " selected" : ""}>Balloon Payment</option>
   </select>
 </div>
-<input type="number" class="bx-input" data-c2="pct" placeholder="0" value="${escapeHtml(pct || "")}">
-<input type="number" class="bx-input" data-c2="amount" placeholder="0" value="${escapeHtml(amount || "")}">
+<input type="number" class="bx-input" data-c2="pct" placeholder="0" value="${escapeHtml(pct || "")}" oninput="onCustom02PctInput(this)">
+<input type="number" class="bx-input" data-c2="amount" placeholder="0" value="${escapeHtml(amount || "")}" oninput="onCustom02AmountInput(this)">
 <input type="date" class="bx-input" data-c2="date" value="${escapeHtml(date || "")}">
 <button class="btn-remove-row" onclick="removeCustom02Row(${idx})" type="button" title="Remove">&times;</button>
 `;
