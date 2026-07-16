@@ -9,7 +9,7 @@ const PLAN_ENUM = {
 };
 function planEnumValue(plan) {
   if (!plan) return PLAN_ENUM.notSelected;
-  if (plan === "custom") return PLAN_ENUM.custom;
+  if (plan === "custom" || plan === "custom-2") return PLAN_ENUM.custom;
   return PLAN_ENUM.standard;
 }
 
@@ -206,7 +206,8 @@ async function recalcDealAmount() {
   if (disc < 0) disc = 0;
 
   // ── Custom plan: price from the manually entered Total Amount ──
-  if (plan === "custom") {
+  if (plan === "custom" || plan === "custom-2") {
+    const inputId = plan === "custom-2" ? "totalAmount2" : "totalAmount";
     const raw = document.getElementById("totalAmount").value;
     const total = parseFloat(String(raw).replace(/[^0-9.\-]/g, ""));
     if (isNaN(total) || total <= 0) {
@@ -306,7 +307,12 @@ function scheduleRecalc() {
 function enforceDiscountCap() {
   const plan = document.getElementById("paymentPlan").value;
   const d = document.getElementById("discountPct");
-  if (plan && plan !== "custom" && parseFloat(d.value) > MAX_DISCOUNT) {
+  if (
+    plan &&
+    plan !== "custom" &&
+    plan !== "custom-2" &&
+    parseFloat(d.value) > MAX_DISCOUNT
+  ) {
     d.value = MAX_DISCOUNT;
     setAmountStatus(
       "Max discount for this plan is " + MAX_DISCOUNT + "%.",
@@ -393,6 +399,7 @@ const CUSTOM_FIELDS = [
   "phPayments",
   "phStartDate",
 ];
+const CUSTOM2_FIELDS = ["totalAmount2"];
 const INSTALLMENT_FIELDS = ["downpaymentStartDate"];
 const FULLPAYMENT_FIELDS = ["paymentDate"];
 
@@ -406,6 +413,7 @@ function clearFields(ids) {
 function onPlanChange() {
   const plan = document.getElementById("paymentPlan").value;
   const isCustom = plan === "custom";
+  const isCustom02 = plan === "custom-2";
   const isInstallment = INSTALLMENT_PLANS.indexOf(plan) !== -1;
   const isFull = plan === "full_payment";
 
@@ -425,6 +433,7 @@ function onPlanChange() {
 
   // Reset the inputs of any block that is now hidden, so storage stays clean
   if (!isCustom) clearFields(CUSTOM_FIELDS);
+  if (!isCustom02) clearFields(CUSTOM2_FIELDS);
   if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
   if (!isFull) clearFields(FULLPAYMENT_FIELDS);
 
@@ -528,11 +537,14 @@ function handleDataChange() {
     payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
     payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(data.paymentPlan);
 
-    fetch("https://bx24paymentfieldbackend.premierchoiceint.online/updateDeal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dealId: currentDealId, fields: payload }),
-    })
+    fetch(
+      "https://bx24paymentfieldbackend.premierchoiceint.online/updateDeal",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId: currentDealId, fields: payload }),
+      },
+    )
       .then(function (r) {
         return r.json().then(function (out) {
           return { ok: r.ok, out: out };
@@ -573,12 +585,16 @@ function populateFields(rawValue) {
         .getElementById("customBlock")
         .classList.toggle("visible", p === "custom");
       document
+        .getElementById("custom2Block")
+        .classList.toggle("visible", p === "custom-2");
+      document
         .getElementById("installmentBlock")
         .classList.toggle("visible", INSTALLMENT_PLANS.indexOf(p) !== -1);
       document
         .getElementById("fullPaymentBlock")
         .classList.toggle("visible", p === "full_payment");
-        document.getElementById("balloonSection").style.display = (p === "custom") ? "" : "none";
+      document.getElementById("balloonSection").style.display =
+        p === "custom" ? "" : "none";
     }
 
     if (data.discountPct)
@@ -1257,4 +1273,8 @@ document.getElementById("discountPct").addEventListener("input", function () {
 // Custom Total Amount: re-calculate the deal amount as it's typed
 document
   .getElementById("totalAmount")
+  .addEventListener("input", scheduleRecalc);
+
+document
+  .getElementById("totalAmount2")
   .addEventListener("input", scheduleRecalc);
