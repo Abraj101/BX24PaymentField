@@ -616,6 +616,27 @@ function collectData() {
       document.getElementById("phStartDate").value || "";
   }
 
+  if (plan === "custom-2") {
+    const rows = [];
+    document
+      .querySelectorAll("#custom02Rows .custom02-row")
+      .forEach(function (row) {
+        const type = row.querySelector('[data-c2="type"]').value;
+        const pct = row.querySelector('[data-c2="pct"]').value.trim();
+        const amount = row.querySelector('[data-c2="amount"]').value.trim();
+        const date = row.querySelector('[data-c2="date"]').value;
+        if (type || pct || amount || date) {
+          rows.push({
+            installment: type,
+            percentage: pct,
+            amount: amount,
+            paymentDate: date,
+          });
+        }
+      });
+    data.rows = rows;
+  }
+
   // Schedule date stored only for 60/40, 3yr, 5yr (used as the schedule anchor in Booking/SPA)
   if (INSTALLMENT_PLANS.indexOf(plan) !== -1) {
     data.downpaymentStartDate =
@@ -762,6 +783,18 @@ function populateFields(rawValue) {
         var el = document.getElementById(customMap[key]);
         if (el && data[key] !== undefined && data[key] !== "")
           el.value = data[key];
+      });
+    }
+
+    if (
+      data.paymentPlan === "custom-2" &&
+      Array.isArray(data.rows) &&
+      data.rows.length > 0
+    ) {
+      document.getElementById("custom02Rows").innerHTML = "";
+      custom02Counter = 0;
+      data.rows.forEach(function (r) {
+        addCustom02Row(r.installment, r.percentage, r.amount, r.paymentDate);
       });
     }
 
