@@ -369,6 +369,87 @@ function clearBalloons() {
 
 // ── Furnished toggle ──────────────────────────────────────────────────────────
 
+// ── Custom 02 Schedule Table ──────────────────────────────────────────────────
+
+let custom02Counter = 0;
+
+function addCustom02Row(type, pct, amount, date) {
+  custom02Counter++;
+  const idx = custom02Counter;
+
+  const empty = document.getElementById("custom02Empty");
+  if (empty) empty.style.display = "none";
+
+  const row = document.createElement("div");
+  row.className = "custom02-row";
+  row.id = `custom02Row_${idx}`;
+  row.innerHTML = `
+<div class="select-wrapper">
+  <select class="bx-select" data-c2="type">
+    <option value="down_payment"${type === "down_payment" ? " selected" : ""}>Down Payment</option>
+    <option value="installment"${type === "installment" ? " selected" : ""}>Installment</option>
+    <option value="balloon_payment"${type === "balloon_payment" ? " selected" : ""}>Balloon Payment</option>
+  </select>
+</div>
+<input type="number" class="bx-input" data-c2="pct" placeholder="0" value="${escapeHtml(pct || "")}">
+<input type="number" class="bx-input" data-c2="amount" placeholder="0" value="${escapeHtml(amount || "")}">
+<input type="date" class="bx-input" data-c2="date" value="${escapeHtml(date || "")}">
+<button class="btn-remove-row" onclick="removeCustom02Row(${idx})" type="button" title="Remove">&times;</button>
+`;
+  document.getElementById("custom02Rows").appendChild(row);
+  syncCustom02RowCountField();
+  notifyResize();
+  handleDataChange();
+}
+
+function removeCustom02Row(idx) {
+  const row = document.getElementById(`custom02Row_${idx}`);
+  if (row) row.remove();
+
+  const remaining = document.querySelectorAll("#custom02Rows .custom02-row");
+  const empty = document.getElementById("custom02Empty");
+  if (empty) empty.style.display = remaining.length === 0 ? "block" : "none";
+
+  syncCustom02RowCountField();
+  notifyResize();
+  handleDataChange();
+}
+
+// Reset the table to its empty state (used when leaving Custom 02)
+function clearCustom02Rows() {
+  document.getElementById("custom02Rows").innerHTML =
+    '<div class="schedule-empty" id="custom02Empty">No rows added</div>';
+  custom02Counter = 0;
+  syncCustom02RowCountField();
+}
+
+// Keeps "Number of Rows" showing the true row count after +/× actions
+function syncCustom02RowCountField() {
+  const count = document.querySelectorAll("#custom02Rows .custom02-row").length;
+  const field = document.getElementById("custom02RowCount");
+  if (field) field.value = count;
+}
+
+// Typing a number directly into "Number of Rows" adds/removes rows to match
+function onCustom02RowCountChange() {
+  const field = document.getElementById("custom02RowCount");
+  let target = parseInt(field.value, 10);
+  if (isNaN(target) || target < 0) target = 0;
+
+  const current = document.querySelectorAll("#custom02Rows .custom02-row");
+  if (target > current.length) {
+    for (let i = current.length; i < target; i++) addCustom02Row();
+  } else if (target < current.length) {
+    for (let i = current.length - 1; i >= target; i--) {
+      current[i].remove();
+    }
+    const remaining = document.querySelectorAll("#custom02Rows .custom02-row");
+    const empty = document.getElementById("custom02Empty");
+    if (empty) empty.style.display = remaining.length === 0 ? "block" : "none";
+  }
+  handleDataChange();
+}
+
 function onFurnishedChange() {
   const on = document.getElementById("furnishedToggle").checked;
   document.getElementById("furnishedState").innerText = on ? "Yes" : "No";
@@ -437,6 +518,7 @@ function onPlanChange() {
   // Reset the inputs of any block that is now hidden, so storage stays clean
   if (!isCustom) clearFields(CUSTOM_FIELDS);
   if (!isCustom02) clearFields(CUSTOM2_FIELDS);
+  if (!isCustom02) clearCustom02Rows();
   if (!isInstallment) clearFields(INSTALLMENT_FIELDS);
   if (!isFull) clearFields(FULLPAYMENT_FIELDS);
 

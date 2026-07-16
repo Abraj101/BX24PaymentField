@@ -400,6 +400,83 @@
                 opacity: 0.6;
                 cursor: not-allowed;
             }
+
+            .schedule-section {
+                padding: 12px 20px 4px;
+            }
+            .schedule-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+            .schedule-title {
+                font-size: 12px;
+                font-weight: 700;
+                color: #535c69;
+            }
+            .btn-add-row {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                border: 1.5px solid #2fc6f6;
+                background: transparent;
+                color: #2fc6f6;
+                font-size: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                outline: none;
+                transition: all 0.15s;
+            }
+            .btn-add-row:hover {
+                background: #2fc6f6;
+                color: #fff;
+            }
+            .schedule-empty {
+                font-size: 12px;
+                color: #b0b8c4;
+                text-align: center;
+                padding: 8px 0 4px;
+                font-style: italic;
+            }
+            .btn-remove-row {
+                background: transparent;
+                border: none;
+                color: #d0d4db;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 0;
+                line-height: 1;
+                transition: color 0.15s;
+            }
+            .btn-remove-row:hover {
+                color: #ff5c5c;
+            }
+            .custom02-table {
+                padding-top: 4px;
+            }
+            .custom02-table-head {
+                display: grid;
+                grid-template-columns: 1.3fr 1fr 1fr 1fr 28px;
+                gap: 8px;
+                padding: 0 0 6px;
+            }
+            .custom02-table-head span {
+                font-size: 10px;
+                font-weight: 700;
+                color: #8e99a4;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
+            .custom02-row {
+                display: grid;
+                grid-template-columns: 1.3fr 1fr 1fr 1fr 28px;
+                gap: 8px;
+                align-items: center;
+                margin-bottom: 8px;
+            }
         </style>
     </head>
     <body>
@@ -767,6 +844,45 @@
             />
         </div>
     </div>
+
+    <div class="field-row">
+    <div class="field-group half">
+        <span class="field-label">Number of Rows</span>
+        <input
+            type="number"
+            class="bx-input"
+            id="custom02RowCount"
+            placeholder="0"
+            min="0"
+            oninput="onCustom02RowCountChange()"
+        />
+    </div>
+</div>
+
+<div class="schedule-section" id="custom02TableSection">
+    <div class="schedule-header">
+        <span class="schedule-title">Payment Schedule</span>
+        <button
+            class="btn-add-row"
+            onclick="addCustom02Row()"
+            type="button"
+        >
+            +
+        </button>
+    </div>
+    <div class="custom02-table" id="custom02Table">
+        <div class="custom02-table-head">
+            <span>Installment</span>
+            <span>% of Purchase Price</span>
+            <span>Amount (AED)</span>
+            <span>Payment Date</span>
+            <span></span>
+        </div>
+        <div id="custom02Rows">
+            <div class="schedule-empty" id="custom02Empty">No rows added</div>
+        </div>
+    </div>
+</div>
 </div>
             </div>
             <!-- /paymentBody -->
