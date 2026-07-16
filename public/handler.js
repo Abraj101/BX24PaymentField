@@ -679,6 +679,8 @@ function collectData() {
 
   if (plan === "custom-2") {
     const rows = [];
+    data.custom02TotalAmount =
+      document.getElementById("custom02TotalAmount").value || "";
     document
       .querySelectorAll("#custom02Rows .custom02-row")
       .forEach(function (row) {
@@ -845,6 +847,17 @@ function populateFields(rawValue) {
         if (el && data[key] !== undefined && data[key] !== "")
           el.value = data[key];
       });
+    }
+
+    if (data.paymentPlan === "custom-2") {
+      var totalEl = document.getElementById("custom02TotalAmount");
+      if (
+        totalEl &&
+        data.custom02TotalAmount !== undefined &&
+        data.custom02TotalAmount !== ""
+      ) {
+        totalEl.value = data.custom02TotalAmount;
+      }
     }
 
     if (
