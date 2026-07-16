@@ -207,8 +207,8 @@ async function recalcDealAmount() {
 
   // ── Custom plan: price from the manually entered Total Amount ──
   if (plan === "custom" || plan === "custom-2") {
-    const inputId = plan === "custom-2" ? "totalAmount2" : "totalAmount";
-    const raw = document.getElementById("totalAmount").value;
+    const inputId = plan === "custom-2" ? "custom02TotalAmount" : "totalAmount";
+    const raw = document.getElementById(inputId).value;
     const total = parseFloat(String(raw).replace(/[^0-9.\-]/g, ""));
     if (isNaN(total) || total <= 0) {
       setAmountStatus("Enter a Total Amount to set the deal amount.");
