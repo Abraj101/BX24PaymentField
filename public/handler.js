@@ -446,6 +446,55 @@ function getCustom02Total() {
   return isNaN(v) ? 0 : v;
 }
 
+// Typing Discount % (Custom 02) fills Discount Amount, and keeps the shared
+// "discountPct" field (used by every other plan) in sync behind the scenes.
+function onCustom02DiscountPctInput(input) {
+  document.getElementById("custom02Block").dataset.discSource = "pct";
+  const total = getCustom02Total();
+  const pct = parseFloat(input.value);
+  if (total > 0 && !isNaN(pct)) {
+    document.getElementById("custom02DiscountAmount").value = round2(
+      (total * pct) / 100,
+    );
+  }
+  const hidden = document.getElementById("discountPct");
+  if (hidden) hidden.value = input.value;
+  scheduleRecalc();
+}
+
+// Typing Discount Amount (Custom 02) fills Discount %, same sync as above.
+function onCustom02DiscountAmountInput(input) {
+  document.getElementById("custom02Block").dataset.discSource = "amount";
+  const total = getCustom02Total();
+  const amt = parseFloat(input.value);
+  const pctEl = document.getElementById("custom02DiscountPct");
+  if (total > 0 && !isNaN(amt)) {
+    pctEl.value = round2((amt / total) * 100);
+  }
+  const hidden = document.getElementById("discountPct");
+  if (hidden) hidden.value = pctEl.value || "0";
+  scheduleRecalc();
+}
+
+// If Total Amount changes after a discount is already set, recompute whichever
+// discount field the user edited last (tracked via discSource).
+function recalcCustom02DiscountFromTotal() {
+  const block = document.getElementById("custom02Block");
+  const source = (block && block.dataset.discSource) || "pct";
+  const total = getCustom02Total();
+  const pctEl = document.getElementById("custom02DiscountPct");
+  const amtEl = document.getElementById("custom02DiscountAmount");
+  if (source === "amount") {
+    const amt = parseFloat(amtEl.value);
+    if (total > 0 && !isNaN(amt)) pctEl.value = round2((amt / total) * 100);
+  } else {
+    const pct = parseFloat(pctEl.value);
+    if (total > 0 && !isNaN(pct)) amtEl.value = round2((total * pct) / 100);
+  }
+  const hidden = document.getElementById("discountPct");
+  if (hidden) hidden.value = pctEl.value || "0";
+}
+
 // Typing a % -> fills in that row's Amount, based on the Total Amount above
 function onCustom02PctInput(input) {
   const row = input.closest(".custom02-row");
@@ -572,7 +621,11 @@ const CUSTOM_FIELDS = [
   "phPayments",
   "phStartDate",
 ];
-const CUSTOM2_FIELDS = ["custom02TotalAmount"];
+const CUSTOM2_FIELDS = [
+  "custom02TotalAmount",
+  "custom02DiscountPct",
+  "custom02DiscountAmount",
+];
 const INSTALLMENT_FIELDS = ["downpaymentStartDate"];
 const FULLPAYMENT_FIELDS = ["paymentDate"];
 
@@ -594,6 +647,14 @@ function onPlanChange() {
   document
     .getElementById("custom02Block")
     .classList.toggle("visible", isCustom02);
+  document.getElementById("discountGroup").style.display = isCustom02
+    ? "none"
+    : "";
+  if (isCustom02) {
+    document.getElementById("custom02DiscountPct").value =
+      document.getElementById("discountPct").value || "0";
+    recalcCustom02DiscountFromTotal();
+  }
   document
     .getElementById("installmentBlock")
     .classList.toggle("visible", isInstallment);
@@ -679,8 +740,11 @@ function collectData() {
 
   if (plan === "custom-2") {
     const rows = [];
-    data.custom02TotalAmount =
+    data.totalAmount =
       document.getElementById("custom02TotalAmount").value || "";
+    data.custom02DiscountAmount =
+      document.getElementById("custom02DiscountAmount").value || "";
+
     document
       .querySelectorAll("#custom02Rows .custom02-row")
       .forEach(function (row) {
@@ -853,10 +917,21 @@ function populateFields(rawValue) {
       var totalEl = document.getElementById("custom02TotalAmount");
       if (
         totalEl &&
-        data.custom02TotalAmount !== undefined &&
-        data.custom02TotalAmount !== ""
+        data.totalAmount !== undefined &&
+        data.totalAmount !== ""
       ) {
-        totalEl.value = data.custom02TotalAmount;
+        totalEl.value = data.totalAmount;
+      }
+      var c2PctEl = document.getElementById("custom02DiscountPct");
+      if (c2PctEl)
+        c2PctEl.value = document.getElementById("discountPct").value || "";
+      var c2AmtEl = document.getElementById("custom02DiscountAmount");
+      if (
+        c2AmtEl &&
+        data.custom02DiscountAmount !== undefined &&
+        data.custom02DiscountAmount !== ""
+      ) {
+        c2AmtEl.value = data.custom02DiscountAmount;
       }
     }
 
@@ -1501,6 +1576,10 @@ document
 document
   .getElementById("custom02TotalAmount")
   .addEventListener("input", scheduleRecalc);
+
+document
+  .getElementById("custom02TotalAmount")
+  .addEventListener("input", recalcCustom02DiscountFromTotal);
 
 document
   .getElementById("custom02TotalAmount")
