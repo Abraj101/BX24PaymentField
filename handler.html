@@ -485,6 +485,11 @@
             .custom02-row input[data-c2="amount"] {
                 text-align: right;
             }
+            .bx-input[readonly] {
+                background: #f1f4f8;
+                color: #5b6b7c;
+                cursor: not-allowed;
+            }
         </style>
     </head>
     <body>
@@ -875,6 +880,19 @@
             id="custom02DiscountAmount"
             placeholder="0"
             oninput="onCustom02DiscountAmountInput(this)"
+        />
+    </div>
+</div>
+
+<div class="field-row">
+    <div class="field-group">
+        <span class="field-label">Total Amount After Discount (AED)</span>
+        <input
+            type="number"
+            class="bx-input"
+            id="custom02AmountAfterDiscount"
+            placeholder="0"
+            readonly
         />
     </div>
 </div>

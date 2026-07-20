@@ -446,6 +446,23 @@ function getCustom02Total() {
   return isNaN(v) ? 0 : v;
 }
 
+function recalcCustom02AmountAfterDiscount() {
+  const total = getCustom02Total();
+  const discAmt =
+    parseFloat(document.getElementById("custom02DiscountAmount").value) || 0;
+  document.getElementById("custom02AmountAfterDiscount").value = round2(
+    total - discAmt,
+  );
+}
+
+function getCustom02Base() {
+  const el = document.getElementById("custom02AmountAfterDiscount");
+  const v = parseFloat(
+    String((el && el.value) || "").replace(/[^0-9.\-]/g, ""),
+  );
+  return !isNaN(v) && v > 0 ? v : getCustom02Total();
+}
+
 // Typing Discount % (Custom 02) fills Discount Amount, and keeps the shared
 // "discountPct" field (used by every other plan) in sync behind the scenes.
 function onCustom02DiscountPctInput(input) {
@@ -459,6 +476,8 @@ function onCustom02DiscountPctInput(input) {
   }
   const hidden = document.getElementById("discountPct");
   if (hidden) hidden.value = input.value;
+  recalcCustom02AmountAfterDiscount();
+  recalcCustom02RowsFromTotal();
   scheduleRecalc();
 }
 
@@ -473,6 +492,8 @@ function onCustom02DiscountAmountInput(input) {
   }
   const hidden = document.getElementById("discountPct");
   if (hidden) hidden.value = pctEl.value || "0";
+  recalcCustom02AmountAfterDiscount();
+  recalcCustom02RowsFromTotal();
   scheduleRecalc();
 }
 
@@ -493,6 +514,7 @@ function recalcCustom02DiscountFromTotal() {
   }
   const hidden = document.getElementById("discountPct");
   if (hidden) hidden.value = pctEl.value || "0";
+  recalcCustom02AmountAfterDiscount();
 }
 
 // Typing a % -> fills in that row's Amount, based on the Total Amount above
@@ -500,7 +522,7 @@ function onCustom02PctInput(input) {
   const row = input.closest(".custom02-row");
   if (!row) return;
   row.dataset.c2Source = "pct";
-  const total = getCustom02Total();
+  const total = getCustom02Base();
   const pct = parseFloat(input.value);
   const amountInput = row.querySelector('[data-c2="amount"]');
   if (total > 0 && !isNaN(pct)) {
@@ -513,7 +535,7 @@ function onCustom02AmountInput(input) {
   const row = input.closest(".custom02-row");
   if (!row) return;
   row.dataset.c2Source = "amount";
-  const total = getCustom02Total();
+  const total = getCustom02Base();
   const amt = parseFloat(input.value);
   const pctInput = row.querySelector('[data-c2="pct"]');
   if (total > 0 && !isNaN(amt)) {
@@ -524,7 +546,7 @@ function onCustom02AmountInput(input) {
 // If Total Amount changes after rows already have values, recompute every row
 // from whichever field the user typed into last (tracked via c2Source).
 function recalcCustom02RowsFromTotal() {
-  const total = getCustom02Total();
+  const total = getCustom02Base();
   document
     .querySelectorAll("#custom02Rows .custom02-row")
     .forEach(function (row) {
@@ -625,6 +647,7 @@ const CUSTOM2_FIELDS = [
   "custom02TotalAmount",
   "custom02DiscountPct",
   "custom02DiscountAmount",
+  "custom02AmountAfterDiscount",
 ];
 const INSTALLMENT_FIELDS = ["downpaymentStartDate"];
 const FULLPAYMENT_FIELDS = ["paymentDate"];
@@ -744,6 +767,8 @@ function collectData() {
       document.getElementById("custom02TotalAmount").value || "";
     data.custom02DiscountAmount =
       document.getElementById("custom02DiscountAmount").value || "";
+    data.custom02AmountAfterDiscount =
+      document.getElementById("custom02AmountAfterDiscount").value || "";
 
     document
       .querySelectorAll("#custom02Rows .custom02-row")
@@ -932,6 +957,15 @@ function populateFields(rawValue) {
         data.custom02DiscountAmount !== ""
       ) {
         c2AmtEl.value = data.custom02DiscountAmount;
+      }
+
+      var c2AfterEl = document.getElementById("custom02AmountAfterDiscount");
+      if (
+        c2AfterEl &&
+        data.custom02AmountAfterDiscount !== undefined &&
+        data.custom02AmountAfterDiscount !== ""
+      ) {
+        c2AfterEl.value = data.custom02AmountAfterDiscount;
       }
     }
 
