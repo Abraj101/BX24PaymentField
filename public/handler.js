@@ -26,6 +26,7 @@ const PLAN_LIST_ENUM = {
   "5_years": "1335",
   full_payment: "1337",
   custom: "1339",
+  "custom-2": "5247",
 };
 function planListEnumValue(plan) {
   return PLAN_LIST_ENUM[plan] || "";
