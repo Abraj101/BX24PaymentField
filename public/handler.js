@@ -884,6 +884,8 @@ function populateFields(rawValue) {
         .classList.toggle("visible", p === "full_payment");
       document.getElementById("balloonSection").style.display =
         p === "custom" ? "" : "none";
+      document.getElementById("discountGroup").style.display =
+        p === "custom-2" ? "none" : "";
     }
 
     if (data.discountPct)
