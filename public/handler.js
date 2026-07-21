@@ -17,6 +17,7 @@ function planEnumValue(plan) {
 // NOTE: verify via crm.deal.fields that this is a boolean/checkbox field —
 // those store "Y"/"N" strings, not JS true/false.
 const BOOKING_CONFIRMED_FIELD_KEY = "UF_CRM_1783017390988";
+const PAYMENT_LOCKED_FIELD_KEY = "UF_CRM_1784613340787";
 
 // Visible "Payment Plan" dropdown on the General tab — mirrors the exact plan chosen here
 const PLAN_LIST_FIELD_KEY = "UF_CRM_1782057587352";
@@ -1022,7 +1023,9 @@ function isTrueValue(v) {
   return v === "Y" || v === true || v === "1" || v === 1;
 }
 
-let _formLocked = false; // true once booking is confirmed — blocks all further edits
+// let _formLocked = false; // true once booking is confirmed — blocks all further edits
+let _unitLocked = false; // true once booking is confirmed — locks the Unit field only
+let _paymentFieldLocked = false;
 
 // ── Unit selection, status & gating ───────────────────────────────────────────
 //
@@ -1203,16 +1206,15 @@ function badgeClassFor(label) {
 
 function setPaymentLocked(locked) {
   const body = document.getElementById("paymentBody");
-  if (body) body.classList.toggle("locked", !!locked);
+  if (body) body.classList.toggle("locked", !!locked || _paymentFieldLocked);
 }
 
 // Locks EVERYTHING once a booking is confirmed: the unit picker, both action
 // buttons, and the payment fields. Once locked, nothing in the widget is
 // editable — used both right after "Mark Booked" succeeds and on initial
 // render when the record already has BOOKING_CONFIRMED_FIELD_KEY = true.
-function lockEntireForm(locked, message) {
-  _formLocked = locked;
-  setPaymentLocked(locked);
+function lockUnitSection(locked, message) {
+  _unitLocked = locked;
 
   const unitSelect = document.getElementById("unitSelect");
   if (unitSelect) unitSelect.disabled = !!locked;
@@ -1262,7 +1264,7 @@ function onUnitChange() {
     selectedUnitName = "";
     badge.className = "status-badge empty";
     badge.textContent = "—";
-    if (!_formLocked) {
+    if (!_unitLocked) {
       setPaymentLocked(true);
       showGateMsg("Select a unit to enter payment details.", false);
     }
@@ -1279,7 +1281,7 @@ function onUnitChange() {
 
   // Booking already confirmed — badge/value are painted above, but skip all
   // gating logic entirely so neither button can be revealed.
-  if (_formLocked) {
+  if (_unitLocked) {
     if (!_suppressSave) handleDataChange();
     return;
   }
@@ -1414,14 +1416,14 @@ async function markBooked() {
           id: currentDealId,
           fields: confirmFields,
         });
-        lockEntireForm(
+        lockUnitSection(
           true,
           "Booking confirmed. This record is now locked and cannot be edited.",
         );
       } catch (e) {
         console.error("[markBooked] booking-confirmed field update error:", e);
         // Status is booked either way — lock the form regardless, but flag the field issue
-        lockEntireForm(
+        lockUnitSection(
           true,
           "Unit marked Booked, but the confirmation field failed to update (see console). Record is locked.",
         );
@@ -1488,7 +1490,7 @@ async function initUnitSection(dealData) {
 
     await loadUnits();
     populateUnitDropdown();
-    sel.disabled = _formLocked; // preserve an earlier lock instead of always re-enabling
+    sel.disabled = _unitLocked; // preserve an earlier lock instead of always re-enabling
 
     // Which unit is currently attached to THIS deal (native product rows)?
     try {
@@ -1570,7 +1572,11 @@ BX24.init(function () {
         if (dealData && dealData[STORAGE_FIELD_KEY]) {
           populateFields(dealData[STORAGE_FIELD_KEY]);
         }
+
         document.getElementById("saveIndicator").innerText = "Ready ✓";
+
+        _paymentFieldLocked = isTrueValue(dealData[PAYMENT_LOCKED_FIELD_KEY]);
+        setPaymentLocked(_paymentFieldLocked);
 
         // Lock immediately if this deal was already confirmed Booked —
         // don't wait on the unit-loading round trip (loadUnits/backend fetch)
@@ -1578,7 +1584,7 @@ BX24.init(function () {
         // to populate the dropdown/badge for display, but it respects
         // _formLocked and won't re-enable anything.
         if (isTrueValue(dealData[BOOKING_CONFIRMED_FIELD_KEY])) {
-          lockEntireForm(
+          lockUnitSection(
             true,
             "Booking confirmed. This record is locked and cannot be edited.",
           );
