@@ -28,7 +28,7 @@ async function getCurrentUserId() {
       callback: function (data) {
         console.log("PullClient callback received data:", data);
         console.warn(data);
-      },
+      }.bind(this),
     });
 
     window.appPullClient.start();
