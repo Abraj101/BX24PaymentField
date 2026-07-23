@@ -471,11 +471,14 @@ function onCustom02DiscountPctInput(input) {
   document.getElementById("custom02Block").dataset.discSource = "pct";
   const total = getCustom02Total();
   const pct = parseFloat(input.value);
-  if (total > 0 && !isNaN(pct)) {
-    document.getElementById("custom02DiscountAmount").value = round2(
-      (total * pct) / 100,
-    );
+  const amountEl = document.getElementById("custom02DiscountAmount");
+
+  if (input.value === "") {
+    amountEl.value = "";
+  } else if (total > 0 && !isNaN(pct)) {
+    amountEl.value = round2((total * pct) / 100);
   }
+
   const hidden = document.getElementById("discountPct");
   if (hidden) hidden.value = input.value;
   recalcCustom02AmountAfterDiscount();
@@ -489,9 +492,13 @@ function onCustom02DiscountAmountInput(input) {
   const total = getCustom02Total();
   const amt = parseFloat(input.value);
   const pctEl = document.getElementById("custom02DiscountPct");
-  if (total > 0 && !isNaN(amt)) {
+
+  if (input.value === "") {
+    pctEl.value = "";
+  } else if (total > 0 && !isNaN(amt)) {
     pctEl.value = round2((amt / total) * 100);
   }
+
   const hidden = document.getElementById("discountPct");
   if (hidden) hidden.value = pctEl.value || "0";
   recalcCustom02AmountAfterDiscount();
