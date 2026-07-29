@@ -835,14 +835,11 @@ function handleDataChange() {
     payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
     payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(data.paymentPlan);
 
-    fetch(
-      "https://bx24paymentfieldbackend.premierchoiceint.online/updateDeal",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId: currentDealId, fields: payload }),
-      },
-    )
+    fetch("https://bx24paymentfieldbackend.pcirealestate.com/updateDeal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealId: currentDealId, fields: payload }),
+    })
       .then(function (r) {
         return r.json().then(function (out) {
           return { ok: r.ok, out: out };
@@ -1161,7 +1158,7 @@ async function loadUnits() {
   await resolveStatusEnum();
 
   const resp = await fetch(
-    "https://bx24paymentfieldbackend.premierchoiceint.online/getAllProducts",
+    "https://bx24paymentfieldbackend.pcirealestate.com/getAllProducts",
   );
   if (!resp.ok) {
     throw new Error("Failed to fetch units: " + resp.status);
@@ -1397,7 +1394,7 @@ async function markBooked() {
   btn.textContent = "Marking Booked…";
   try {
     const resp = await fetch(
-      "https://bx24paymentfieldbackend.premierchoiceint.online/updateProduct",
+      "https://bx24paymentfieldbackend.pcirealestate.com/updateProduct",
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
