@@ -1339,42 +1339,52 @@ function onUnitChange() {
 
 // Step 1: Attach the chosen unit to this deal's product rows.
 // This ONLY adds the product row — it does NOT touch the catalog status.
-// NOTE: because this no longer calls the backend's atomic /updateProduct
-// check, two deals could theoretically attach the same "Available" unit
-// before either calls Mark Booked. If that matters for your workflow,
-// add a server-side guard (or re-check status here) before allowing attach.
+// Delegates to the backend's /attachProduct, which re-checks (server-side,
+// via the deal's own OAuth connection) that the unit is still Available (or
+// already attached to this deal) and that the deal is at "Sales Booking"
+// before replacing the deal's product rows with just this one unit. This
+// closes the race where two deals could otherwise attach the same unit.
 async function attachUnit() {
   if (!currentDealId || !selectedUnitId) return;
   const btn = document.getElementById("attachBtn");
   btn.disabled = true;
   btn.textContent = "Attaching…";
   try {
-    // This widget enforces "exactly one unit product row per deal". Rather
-    // than trying to remove just the row we think is currently attached
-    // (which breaks if the deal ever picked up a stray extra row from
-    // elsewhere), we replace the ENTIRE product-rows array with just the
-    // newly selected unit. This also self-heals any deal that already has
-    // leftover/duplicate rows from before this fix.
-    await callBX("crm.deal.productrows.set", {
-      id: currentDealId,
-      rows: [
-        {
-          PRODUCT_ID: selectedUnitId,
-          QUANTITY: 1,
-        },
-      ],
-    });
+    const resp = await fetch(
+      "https://bx24paymentfieldbackend.pcirealestate.com/attachProduct",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: currentDealId,
+          productId: selectedUnitId,
+        }),
+      },
+    );
+    const out = await resp.json();
 
-    _attachedUnitId = selectedUnitId;
-    handleDataChange();
-    if (typeof scheduleRecalc === "function") scheduleRecalc();
+    if (out.success) {
+      _attachedUnitId = selectedUnitId;
+      handleDataChange();
+      if (typeof scheduleRecalc === "function") scheduleRecalc();
 
-    // Re-run gating so the Mark Booked button now appears
-    onUnitChange();
+      // Re-run gating so the Mark Booked button now appears
+      onUnitChange();
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Attach Unit";
+      showGateMsg(
+        "Could not attach the unit" +
+          (out.message ? ": " + out.message : "") +
+          ".",
+        true,
+      );
+      console.error("[attachUnit] backend error:", out);
+    }
   } catch (e) {
     btn.disabled = false;
     btn.textContent = "Attach Unit";
-    showGateMsg("Could not attach the unit. Please retry.", true);
+    showGateMsg("Network error while attaching the unit. Please retry.", true);
     console.error("[attachUnit]", e);
   }
   notifyResize();
