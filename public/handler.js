@@ -835,6 +835,11 @@ function handleDataChange() {
     payload[PLAN_FIELD_KEY] = planEnumValue(data.paymentPlan);
     payload[PLAN_LIST_FIELD_KEY] = planListEnumValue(data.paymentPlan);
 
+    console.log("[updateDeal] POST /updateDeal request:", {
+      dealId: currentDealId,
+      fields: payload,
+    });
+
     fetch("https://bx24paymentfieldbackend.pcirealestate.com/updateDeal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -847,6 +852,7 @@ function handleDataChange() {
       })
       .then(function (res) {
         if (res.ok) {
+          console.log("[updateDeal] response:", res.out);
           document.getElementById("saveIndicator").innerText = "Saved ✓";
         } else {
           document.getElementById("saveIndicator").innerText = "Save failed ✗";
@@ -1157,13 +1163,16 @@ async function resolveCatalogIds() {
 async function loadUnits() {
   await resolveStatusEnum();
 
+  console.log("[getAllProducts] GET /getAllProducts request");
   const resp = await fetch(
     "https://bx24paymentfieldbackend.pcirealestate.com/getAllProducts",
   );
   if (!resp.ok) {
+    console.error("[getAllProducts] backend error: HTTP " + resp.status);
     throw new Error("Failed to fetch units: " + resp.status);
   }
   const out = await resp.json();
+  console.log("[getAllProducts] response: " + (Array.isArray(out) ? out.length : (out.data || []).length) + " unit(s)");
   const all = Array.isArray(out) ? out : out.data || [];
 
   _unitCatalog = all.map(function (p) {
@@ -1350,6 +1359,10 @@ async function attachUnit() {
   btn.disabled = true;
   btn.textContent = "Attaching…";
   try {
+    console.log("[attachProduct] POST /attachProduct request:", {
+      dealId: currentDealId,
+      productId: selectedUnitId,
+    });
     const resp = await fetch(
       "https://bx24paymentfieldbackend.pcirealestate.com/attachProduct",
       {
@@ -1362,6 +1375,7 @@ async function attachUnit() {
       },
     );
     const out = await resp.json();
+    console.log("[attachProduct] response:", out);
 
     if (out.success) {
       _attachedUnitId = selectedUnitId;
@@ -1403,6 +1417,9 @@ async function markBooked() {
   btn.disabled = true;
   btn.textContent = "Marking Booked…";
   try {
+    console.log("[updateProduct] PATCH /updateProduct request:", {
+      productId: String(selectedUnitId),
+    });
     const resp = await fetch(
       "https://bx24paymentfieldbackend.pcirealestate.com/updateProduct",
       {
@@ -1414,6 +1431,7 @@ async function markBooked() {
       },
     );
     const out = await resp.json();
+    console.log("[updateProduct] response:", out);
     const badge = document.getElementById("unitStatusBadge");
 
     if (out.success) {
@@ -1451,6 +1469,7 @@ async function markBooked() {
           ".",
         true,
       );
+      console.error("[updateProduct] backend error:", out);
     }
   } catch (e) {
     btn.disabled = false;
