@@ -1039,8 +1039,13 @@ function notifyResize() {
 }
 
 // Interpret a Bitrix boolean/checkbox UF value regardless of how it comes back
-// (string "Y"/"N", real boolean, or "1"/"0")
+// (string "Y"/"N", real boolean, "1"/"0", or boxed as an array/{value:...} —
+// Bitrix does this for some field configs even when MULTIPLE isn't set)
 function isTrueValue(v) {
+  if (Array.isArray(v)) v = v[0];
+  if (v && typeof v === "object") {
+    v = v.value !== undefined ? v.value : v.VALUE;
+  }
   return v === "Y" || v === true || v === "1" || v === 1;
 }
 
@@ -1617,6 +1622,11 @@ BX24.init(function () {
         }
 
         document.getElementById("saveIndicator").innerText = "Ready ✓";
+
+        console.log("[Unit] lock field raw values:", {
+          BOOKING_CONFIRMED_FIELD_KEY: dealData[BOOKING_CONFIRMED_FIELD_KEY],
+          PAYMENT_LOCKED_FIELD_KEY: dealData[PAYMENT_LOCKED_FIELD_KEY],
+        });
 
         _paymentFieldLocked = isTrueValue(dealData[PAYMENT_LOCKED_FIELD_KEY]);
         setPaymentLocked(_paymentFieldLocked);
