@@ -199,6 +199,29 @@ async function getProductPlanPrice(productId, plan) {
   return extractPropValue(product, matches[0].id || matches[0].ID);
 }
 
+// Push a pre-computed deal amount to the backend (pass-through write —
+// all calculation still happens here in recalcDealAmount).
+async function setDealAmount(amount) {
+  console.log("[setDealAmount] POST /setDealAmount request:", {
+    dealId: currentDealId,
+    amount: amount,
+  });
+  const resp = await fetch(
+    "https://bx24paymentfieldbackend.pcirealestate.com/setDealAmount",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealId: currentDealId, amount: amount }),
+    },
+  );
+  const out = await resp.json();
+  console.log("[setDealAmount] response:", out);
+  if (!out.success) {
+    throw new Error(out.message || "Failed to update deal amount");
+  }
+  return out;
+}
+
 // Read deal products, sum plan prices, apply capped discount, write the amount
 async function recalcDealAmount() {
   const plan = document.getElementById("paymentPlan").value;
@@ -219,13 +242,7 @@ async function recalcDealAmount() {
     if (disc > 100) disc = 100; // no 15% cap on Custom — only sane bounds
     const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
     try {
-      await callBX("crm.deal.update", {
-        id: currentDealId,
-        fields: {
-          OPPORTUNITY: finalAmount,
-          IS_MANUAL_OPPORTUNITY: "Y",
-        },
-      });
+      await setDealAmount(finalAmount);
       setAmountStatus(
         "Amount set: " +
           finalAmount.toLocaleString() +
@@ -281,13 +298,7 @@ async function recalcDealAmount() {
 
     const finalAmount = Math.round(total * (1 - disc / 100) * 100) / 100;
 
-    await callBX("crm.deal.update", {
-      id: currentDealId,
-      fields: {
-        OPPORTUNITY: finalAmount,
-        IS_MANUAL_OPPORTUNITY: "Y",
-      },
-    });
+    await setDealAmount(finalAmount);
 
     setAmountStatus(
       "Amount set: " +
@@ -1419,6 +1430,7 @@ async function markBooked() {
   try {
     console.log("[updateProduct] PATCH /updateProduct request:", {
       productId: String(selectedUnitId),
+      dealId: currentDealId,
     });
     const resp = await fetch(
       "https://bx24paymentfieldbackend.pcirealestate.com/updateProduct",
@@ -1427,6 +1439,7 @@ async function markBooked() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productId: String(selectedUnitId),
+          dealId: currentDealId,
         }),
       },
     );
@@ -1440,21 +1453,18 @@ async function markBooked() {
       badge.textContent = ST_BOOKED;
       handleDataChange();
 
-      // Flag the deal itself as confirmed-booked
-      try {
-        const confirmFields = {};
-        confirmFields[BOOKING_CONFIRMED_FIELD_KEY] = "Y";
-        await callBX("crm.deal.update", {
-          id: currentDealId,
-          fields: confirmFields,
-        });
+      // The backend sets the deal's booking-confirmed flag atomically with the
+      // product status flip — dealFlagUpdated tells us whether that part landed.
+      if (out.dealFlagUpdated) {
         lockUnitSection(
           true,
           "Booking confirmed. This record is now locked and cannot be edited.",
         );
-      } catch (e) {
-        console.error("[markBooked] booking-confirmed field update error:", e);
-        // Status is booked either way — lock the form regardless, but flag the field issue
+      } else {
+        console.error(
+          "[markBooked] backend reported the deal booking-confirmed flag failed to update:",
+          out,
+        );
         lockUnitSection(
           true,
           "Unit marked Booked, but the confirmation field failed to update (see console). Record is locked.",
