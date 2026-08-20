@@ -1060,7 +1060,8 @@ const UNIT_STATUS_PROP_ID = 99; // PROPERTY_99 (unit status list field)
 const UNIT_SECTION_NAME = "Dubai Inventory"; // catalog section holding the units
 let UNIT_SECTION_ID = 53; // Dubai Inventory section (resolved)
 let UNIT_IBLOCK_ID = 15; // CRM Product Catalog iblock (resolved)
-const UNIT_PIPELINE_STAGE_BOOKING = "Sales Booking"; // stage where a unit may be attached
+// Stages where a unit may be attached
+const UNIT_PIPELINE_STAGES_FOR_ATTACH = ["Sales Booking", "Sales Proposal"];
 const ST_AVAILABLE = "Available",
   ST_BOOKED = "Booked",
   ST_SOLD = "Sold",
@@ -1337,7 +1338,9 @@ function onUnitChange() {
       attachBtn.style.display = "block";
     } else {
       showGateMsg(
-        'Unit is available. It can be attached once the deal reaches "Sales Booking".',
+        "Unit is available. It can be attached once the deal reaches \"" +
+          UNIT_PIPELINE_STAGES_FOR_ATTACH.join('" or "') +
+          '".',
         false,
       );
     }
@@ -1518,9 +1521,10 @@ async function resolveDealStage(dealData) {
       return norm(s.STATUS_ID) === norm(dealData.STAGE_ID);
     });
     _currentStageName = cur ? String(cur.NAME || "") : "";
-    _isBookingStage =
-      _currentStageName.toLowerCase() ===
-      UNIT_PIPELINE_STAGE_BOOKING.toLowerCase();
+    const stageLower = _currentStageName.toLowerCase();
+    _isBookingStage = UNIT_PIPELINE_STAGES_FOR_ATTACH.some(function (s) {
+      return s.toLowerCase() === stageLower;
+    });
   } catch (e) {
     console.warn("[Unit] stage resolve failed", e);
     _isBookingStage = false;
