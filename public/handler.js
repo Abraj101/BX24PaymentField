@@ -823,6 +823,7 @@ function collectData() {
   // Selected unit (persists the picker choice across reloads)
   data.unitId = selectedUnitId || "";
   data.unitName = selectedUnitName || "";
+  data.projectSectionId = selectedProjectSectionId || "";
 
   return data;
 }
@@ -888,6 +889,9 @@ function populateFields(rawValue) {
     if (data.unitId) {
       selectedUnitId = Number(data.unitId);
       selectedUnitName = data.unitName || "";
+    }
+    if (data.projectSectionId) {
+      selectedProjectSectionId = Number(data.projectSectionId);
     }
 
     if (data.paymentPlan) {
@@ -1067,14 +1071,23 @@ const ST_AVAILABLE = "Available",
   ST_SOLD = "Sold",
   ST_RESERVED = "Reserved";
 
+// /getAllProducts now returns units from more than one catalog section — each
+// section is its own "project". Map each section id to the project name shown
+// in the Project dropdown; add a row here whenever a new project is onboarded.
+const PROJECT_SECTIONS = [
+  { sectionId: 71, name: "Gateway" },
+  { sectionId: 63, name: "South Lofts 1" },
+];
+
 let _statusEnum = null; // { byId:{id:label}, byLabel:{label:id} }
-let _unitCatalog = []; // [{ id, name, status }]
+let _unitCatalog = []; // [{ id, name, status, sectionId }]
 let _unitStatusById = {}; // id -> status label
 let _currentStageName = "";
 let _isBookingStage = false;
 let _attachedUnitId = null; // unit currently in THIS deal's product rows
 let selectedUnitId = null; // picker choice (persisted into the deal JSON)
 let selectedUnitName = "";
+let selectedProjectSectionId = null; // Project picker choice (persisted into the deal JSON)
 let _suppressSave = false; // avoid autosave while restoring state on load
 
 // Resolve the four enum values of PROPERTY_99 → their value ids (needed to read/write)
@@ -1176,6 +1189,25 @@ async function resolveCatalogIds() {
   }
 }
 
+// Pull a product's catalog section id off whichever key the backend used
+function extractSectionId(p) {
+  const keys = [
+    "SECTION_ID",
+    "sectionId",
+    "IBLOCK_SECTION_ID",
+    "iblockSectionId",
+    "section_id",
+  ];
+  for (let i = 0; i < keys.length; i++) {
+    let v = p[keys[i]];
+    if (v === undefined || v === null || v === "") continue;
+    if (Array.isArray(v)) v = v[0];
+    const n = Number(v);
+    if (!isNaN(n)) return n;
+  }
+  return null;
+}
+
 // Load all units from the custom backend (replaces the direct catalog.product.list call)
 async function loadUnits() {
   await resolveStatusEnum();
@@ -1191,6 +1223,9 @@ async function loadUnits() {
   const out = await resp.json();
   console.log("[getAllProducts] response: " + (Array.isArray(out) ? out.length : (out.data || []).length) + " unit(s)");
   const all = Array.isArray(out) ? out : out.data || [];
+  if (all.length) {
+    console.log("[getAllProducts] sample raw product (check section-id key here if project filtering looks empty):", all[0]);
+  }
 
   _unitCatalog = all.map(function (p) {
     const raw =
@@ -1201,6 +1236,7 @@ async function loadUnits() {
       id: Number(p.ID ?? p.id),
       name: String(p.NAME ?? p.name ?? "#" + (p.ID ?? p.id)),
       status: status,
+      sectionId: extractSectionId(p),
     };
     _unitStatusById[rec.id] = status;
     return rec;
@@ -1208,10 +1244,30 @@ async function loadUnits() {
   return _unitCatalog;
 }
 
+// Static — the Project dropdown doesn't depend on catalog data, just the config list above
+function populateProjectDropdown() {
+  const sel = document.getElementById("projectSelect");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select project —</option>';
+  PROJECT_SECTIONS.forEach(function (proj) {
+    const o = document.createElement("option");
+    o.value = proj.sectionId;
+    o.textContent = proj.name;
+    sel.appendChild(o);
+  });
+  if (selectedProjectSectionId)
+    sel.value = String(selectedProjectSectionId);
+}
+
+// Unit list is scoped to whichever project is currently selected
 function populateUnitDropdown() {
   const sel = document.getElementById("unitSelect");
   sel.innerHTML = '<option value="">— Select unit —</option>';
+  if (!selectedProjectSectionId) return;
   _unitCatalog
+    .filter(function (u) {
+      return u.sectionId === selectedProjectSectionId;
+    })
     .slice()
     .sort(function (a, b) {
       return a.name.localeCompare(b.name);
@@ -1223,6 +1279,28 @@ function populateUnitDropdown() {
       sel.appendChild(o);
     });
   if (selectedUnitId) sel.value = String(selectedUnitId);
+}
+
+// Project changed — the unit list is scoped to it, so any previously selected
+// unit from a different project no longer applies.
+function onProjectChange() {
+  const sel = document.getElementById("projectSelect");
+  const newSectionId = sel.value ? Number(sel.value) : null;
+  if (newSectionId === selectedProjectSectionId) return;
+  selectedProjectSectionId = newSectionId;
+
+  if (
+    selectedUnitId &&
+    !_unitCatalog.some(function (u) {
+      return u.id === selectedUnitId && u.sectionId === selectedProjectSectionId;
+    })
+  ) {
+    selectedUnitId = null;
+    selectedUnitName = "";
+  }
+
+  populateUnitDropdown();
+  onUnitChange();
 }
 
 function badgeClassFor(label) {
@@ -1248,6 +1326,9 @@ function lockUnitSection(locked, message) {
 
   const unitSelect = document.getElementById("unitSelect");
   if (unitSelect) unitSelect.disabled = !!locked;
+
+  const projectSelect = document.getElementById("projectSelect");
+  if (projectSelect) projectSelect.disabled = !!locked;
 
   const attachBtn = document.getElementById("attachBtn");
   const bookedBtn = document.getElementById("markBookedBtn");
@@ -1535,14 +1616,13 @@ async function resolveDealStage(dealData) {
 async function initUnitSection(dealData) {
   try {
     await resolveDealStage(dealData);
+    populateProjectDropdown();
 
     const sel = document.getElementById("unitSelect");
     sel.innerHTML = '<option value="">Loading...</option>';
     sel.disabled = true;
 
     await loadUnits();
-    populateUnitDropdown();
-    sel.disabled = _unitLocked; // preserve an earlier lock instead of always re-enabling
 
     // Which unit is currently attached to THIS deal (native product rows)?
     try {
@@ -1569,6 +1649,26 @@ async function initUnitSection(dealData) {
     // Prefer the saved picker choice; fall back to the attached unit
     if (selectedUnitId == null && _attachedUnitId)
       selectedUnitId = _attachedUnitId;
+
+    // Derive the project from the selected/attached unit if it wasn't already
+    // saved (deals stored before the Project field existed won't have it).
+    if (selectedProjectSectionId == null && selectedUnitId != null) {
+      const su = _unitCatalog.find(function (u) {
+        return u.id === selectedUnitId;
+      });
+      if (su && su.sectionId != null) selectedProjectSectionId = su.sectionId;
+    }
+
+    const projectSel = document.getElementById("projectSelect");
+    if (projectSel) {
+      projectSel.value = selectedProjectSectionId
+        ? String(selectedProjectSectionId)
+        : "";
+      projectSel.disabled = _unitLocked; // preserve an earlier lock instead of always re-enabling
+    }
+
+    populateUnitDropdown();
+    sel.disabled = _unitLocked; // preserve an earlier lock instead of always re-enabling
 
     if (selectedUnitId && _unitStatusById[selectedUnitId] == null) {
       // Selected unit wasn't in the section list — fetch its status directly
