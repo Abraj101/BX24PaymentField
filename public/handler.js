@@ -1189,23 +1189,10 @@ async function resolveCatalogIds() {
   }
 }
 
-// Pull a product's catalog section id off whichever key the backend used
+// Pull a product's catalog section id off the backend's SECTION_ID field
 function extractSectionId(p) {
-  const keys = [
-    "SECTION_ID",
-    "sectionId",
-    "IBLOCK_SECTION_ID",
-    "iblockSectionId",
-    "section_id",
-  ];
-  for (let i = 0; i < keys.length; i++) {
-    let v = p[keys[i]];
-    if (v === undefined || v === null || v === "") continue;
-    if (Array.isArray(v)) v = v[0];
-    const n = Number(v);
-    if (!isNaN(n)) return n;
-  }
-  return null;
+  const n = Number(p.SECTION_ID);
+  return isNaN(n) ? null : n;
 }
 
 // Load all units from the custom backend (replaces the direct catalog.product.list call)
@@ -1223,9 +1210,6 @@ async function loadUnits() {
   const out = await resp.json();
   console.log("[getAllProducts] response: " + (Array.isArray(out) ? out.length : (out.data || []).length) + " unit(s)");
   const all = Array.isArray(out) ? out : out.data || [];
-  if (all.length) {
-    console.log("[getAllProducts] sample raw product (check section-id key here if project filtering looks empty):", all[0]);
-  }
 
   _unitCatalog = all.map(function (p) {
     const raw =
